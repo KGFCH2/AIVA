@@ -12,8 +12,17 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ error: "No command provided" });
     }
 
-    const response = await commandService.processCommand(command);
-    res.json({ response });
+    const result = await commandService.processCommand(command);
+    
+    if (typeof result === 'object' && result.text) {
+        res.json({ 
+            response: result.text, 
+            action: result.action, 
+            voiceName: result.voiceName 
+        });
+    } else {
+        res.json({ response: result });
+    }
   } catch (error) {
     console.error("Error processing command:", error);
     res.status(500).json({ error: "Internal Server Error" });
