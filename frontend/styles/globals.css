@@ -5,15 +5,15 @@
 }
 
 body {
-  font-family: 'Segoe UI', 'Roboto', 'Courier New', monospace;
-  background-color: #000;
-  background-image: 
-    radial-gradient(circle at 50% 50%, #001a2c 0%, #000000 100%),
-    linear-gradient(rgba(0, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 255, 255, 0.05) 1px, transparent 1px);
+  font-family: 'Orbitron', 'Segoe UI', 'Roboto', 'Courier New', monospace;
+  background-color: #0a0a23;
+  background-image:
+    radial-gradient(circle at 50% 50%, #1a1a2c 0%, #000000 100%),
+    linear-gradient(rgba(255, 0, 60, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 215, 0, 0.08) 1px, transparent 1px);
   background-size: 100% 100%, 40px 40px, 40px 40px;
   background-attachment: fixed;
-  color: #00ffff;
+  color: #00ffe7;
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 100vh;
@@ -35,20 +35,20 @@ body::before {
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle, transparent 60%, rgba(0, 0, 0, 0.8) 100%);
+  background: radial-gradient(circle, transparent 60%, rgba(255, 0, 60, 0.12) 100%);
   pointer-events: none;
-  z-index: 1;
-}
-
-/* Scanline Effect */
-body::after {
-  content: "";
+    background-color: #181824;
+    background-image:
+      radial-gradient(circle at 50% 50%, #23234a 0%, #181824 100%),
+      linear-gradient(rgba(182, 227, 247, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 213, 128, 0.08) 1px, transparent 1px);
+    color: #b6e3f7;
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(255, 0, 60, 0.18) 50%), linear-gradient(90deg, rgba(255, 215, 0, 0.08), rgba(0, 255, 231, 0.04), rgba(255, 0, 60, 0.08));
   background-size: 100% 2px, 3px 100%;
   pointer-events: none;
   z-index: 2;
@@ -58,6 +58,12 @@ body::after {
   position: relative;
   z-index: 10;
   text-align: center;
+  box-shadow: 0 0 40px #ff003c, 0 0 80px #ffd700 inset;
+  border-radius: 18px;
+  background: rgba(10,10,35,0.85);
+  padding: 32px 24px;
+  margin-top: 40px;
+  border: 2px solid #ffd700;
   width: 100%;
   max-width: 1000px;
   min-height: 100vh;
@@ -193,12 +199,96 @@ body::after {
   text-shadow: 0 0 10px #fff;
 }
 
+/* Chat UI enhancements */
+.chat-msg {
+  display: flex;
+  align-items: flex-end;
+  margin-bottom: 12px;
+  animation: fadeIn 0.3s ease;
+}
+.chat-msg.user {
+  justify-content: flex-end;
+}
+.chat-msg.bot {
+  justify-content: flex-start;
+}
+.chat-msg .avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 24px;
+  margin: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-msg .bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  position: relative;
+  word-break: break-word;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  transition: box-shadow 0.2s;
+}
+.chat-msg:hover .bubble {
+  box-shadow: 0 0 10px rgba(0,255,255,0.4);
+}
+.chat-msg.user .bubble {
+  background: rgba(0, 255, 255, 0.12);
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  color: #00ffe7;
+}
+.chat-msg.bot .bubble {
+  background: rgba(0, 0, 0, 0.4);
+  color: #ffffff;
+}
+.chat-msg .timestamp {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.5);
+  margin-top: 4px;
+  text-align: right;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Chat panel styling and scrollbar */
+.glass-panel {
+  max-height: 75vh;
+  min-height: 120px;
+  margin: 48px auto;
+  padding: 32px 24px 16px 24px;
+  border-radius: 18px;
+  background: rgba(36, 44, 66, 0.85);
+  box-shadow: 0 4px 32px rgba(36,44,66,0.18);
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  width: 90%;
+  transition: margin 0.3s, background 0.3s;
+  scroll-padding-top: 20px;
+}
+
+.glass-panel::-webkit-scrollbar {
+  width: 8px;
+}
+.glass-panel::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+.glass-panel::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 255, 0.4);
+  border-radius: 4px;
+}
+
 .mic-button.listening {
-  background: radial-gradient(circle, rgba(255, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.8) 100%);
-  border-color: #ff3333;
-  color: #ff3333;
-  box-shadow: 0 0 30px #ff0000, inset 0 0 30px #ff0000;
-  animation: pulse-red 1.5s infinite;
+  background: radial-gradient(circle, rgba(0, 255, 255, 0.2) 0%, rgba(36, 44, 66, 0.8) 100%);
+  border-color: #00ffff;
+  color: #00ffff;
+  box-shadow: 0 0 16px #00ffff, inset 0 0 16px #00ffff;
+  animation: none;
 }
 
 .status-display {
@@ -241,6 +331,27 @@ body::after {
   border-radius: 10px;
 }
 
+.chat-tools {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin: 8px 0;
+}
+.chat-tools button {
+  background: rgba(0, 0, 0, 0.6); /* dark background for readability */
+  border: 1px solid #00ffe7;
+  color: #00ffe7;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.2s, transform 0.2s;
+}
+.chat-tools button:hover {
+  background: rgba(0, 0, 0, 0.8);
+  transform: scale(1.05);
+}
+
 .glass-panel::before {
   content: "DATA STREAM";
   position: absolute;
@@ -254,16 +365,18 @@ body::after {
 
 /* Corner UI Elements */
 .hud-corner {
+  display: block;
   position: absolute;
-  padding: 20px;
-  border: 1px solid rgba(0, 255, 255, 0.3);
-  width: 200px;
+  padding: 12px 16px;
+  border: 1px solid #00ffe7;
+  width: 220px;
   font-family: 'Courier New', monospace;
-  font-size: 0.8rem;
-  color: rgba(0, 255, 255, 0.7);
-  background: rgba(0, 0, 0, 0.5); /* Added background for better visibility */
-  backdrop-filter: blur(2px);
-  z-index: 5; /* Ensure it sits below the main container content if they overlap, or above? */
+  font-size: 0.95rem; /* larger font */
+  color: #00ffe7; /* high contrast cyan */
+  background: rgba(0, 0, 0, 0.75); /* darker backdrop */
+  backdrop-filter: blur(4px);
+  z-index: 5;
+  line-height: 1.3;
 }
 
 .top-left { top: 20px; left: 20px; border-right: none; border-bottom: none; }
@@ -293,7 +406,7 @@ body::after {
   justify-content: center;
   z-index: 2000;
   transition: opacity 0.8s ease-out;
-  background-image: radial-gradient(circle, #001a2c 0%, #000 80%);
+  background-image: radial-gradient(circle, #23234a 0%, #181824 100%);
 }
 
 .loader-ring {
@@ -437,12 +550,12 @@ body::after {
   left: 0;
   width: 100%;
   height: 100vh;
-  background: radial-gradient(circle at center, #020617, #000);
-  display: flex;
-  flex-direction: column;
+   background: radial-gradient(circle at center, #23234a, #181824);
+   display: flex;
+   flex-direction: column;
   justify-content: center;
   align-items: center;
-  color: #67e8f9;
+   color: #b6e3f7;
   font-family: "Courier New", monospace;
   overflow: hidden;
   z-index: 9999;
@@ -595,4 +708,13 @@ body::after {
 @keyframes scan {
   from { background-position-y: 0; }
   to { background-position-y: 100%; }
+}
+
+.blink {
+  animation: blink-animation 1s steps(2, start) infinite;
+}
+@keyframes blink-animation {
+  to {
+    visibility: hidden;
+  }
 }
