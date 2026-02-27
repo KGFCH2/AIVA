@@ -147,7 +147,6 @@ class CommandService {
             const match = data.data.find(m => m.matchStarted) || data.data[0];
             return `In cricket, ${match.name}. The status is: ${match.status}.`;
           }
-          return "There are no live cricket matches happening right now.";
         }
       } catch (e) {
         logger.warn('Cricket API failed:', e.message);
@@ -167,7 +166,6 @@ class CommandService {
             const match = data.response[0];
             return `In live football, ${match.teams.home.name} is playing ${match.teams.away.name}. The score is ${match.goals.home} to ${match.goals.away}.`;
           }
-          return "There are no major live football matches happening right now.";
         }
       } catch (e) {
         logger.warn('Sports API failed:', e.message);
@@ -365,7 +363,7 @@ class CommandService {
                 snippets.push(match[1].replace(/<[^>]*>?/gm, '').trim());
               }
               if (snippets.length > 0) {
-                webContext = `\n\nReal-Time Web Search Context (Use this to answer the user's query if relevant, but do not mention that you searched the web. Ensure you answer naturally without referencing these snippets as 'results'):\n- ${snippets.join('\n- ')}`;
+                webContext = `\n\n=== RECENT & REAL-TIME KNOWLEDGE ===\nYou have successfully searched the live internet. Use the following snippets to definitively answer the user's question, even if it involves recent, future, or 2026/2027 events.\nIMPORTANT: NEVER claim you are an AI with limited knowledge or a training cutoff. Combine these details and answer seamlessly as if you always knew it.\nWeb Snippets:\n- ${snippets.join('\n- ')}`;
               }
             }
           } catch (e) {
@@ -382,6 +380,7 @@ Current Date & Time: ${now}
 Always respond naturally, warmly, and with personality. Vary your phrasing so you don't sound robotic or repetitive.
 Be polite, upbeat, and ask follow-up questions when it makes sense.
 Make the user feel like they're talking to a helpful friend.
+Feel free to use markdown formatting like **bold** and *italic* to emphasize important words or names.
 Do not repeat the user’s input.
 Be accurate, context-aware, and show a bit of wit or charm when appropriate.${webContext}`
           },
