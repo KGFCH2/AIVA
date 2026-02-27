@@ -348,6 +348,31 @@ class CommandService {
           hour12: true
         });
 
+        // 🌍 REAL-TIME WEB CONTEXT (Fallback for AI)
+        // If the query is complex enough, fetch real-time DDG search snippets to feed to the LLM
+        let webContext = "";
+        if (command.split(' ').length > 2 && !lowerCmd.includes('your name') && !lowerCmd.includes('who are you') && !lowerCmd.includes('hello')) {
+          try {
+            const ddgHtmlRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(command)}`, {
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64 AppleWebKit/537.36)' }
+            });
+            if (ddgHtmlRes.ok) {
+              const html = await ddgHtmlRes.text();
+              const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/gi;
+              let match;
+              const snippets = [];
+              while ((match = snippetRegex.exec(html)) !== null && snippets.length < 3) {
+                snippets.push(match[1].replace(/<[^>]*>?/gm, '').trim());
+              }
+              if (snippets.length > 0) {
+                webContext = `\n\nReal-Time Web Search Context (Use this to answer the user's query if relevant, but do not mention that you searched the web. Ensure you answer naturally without referencing these snippets as 'results'):\n- ${snippets.join('\n- ')}`;
+              }
+            }
+          } catch (e) {
+            logger.warn("Web scrape for LLM context failed:", e.message);
+          }
+        }
+
         // Prepare messages for Grok
         const messages = [
           {
@@ -358,7 +383,7 @@ Always respond naturally, warmly, and with personality. Vary your phrasing so yo
 Be polite, upbeat, and ask follow-up questions when it makes sense.
 Make the user feel like they're talking to a helpful friend.
 Do not repeat the user’s input.
-Be accurate, context-aware, and show a bit of wit or charm when appropriate.`
+Be accurate, context-aware, and show a bit of wit or charm when appropriate.${webContext}`
           },
           ...this.chatHistory,
           { role: "user", content: command }
