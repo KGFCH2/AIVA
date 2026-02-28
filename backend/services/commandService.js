@@ -1,5 +1,8 @@
 const logger = require('../logger');
 const OpenAI = require('openai');
+const { exec } = require('child_process');
+const os = require('os');
+const path = require('path');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 // This service understands multiple Indian languages for basic greetings
@@ -20,6 +23,16 @@ class CommandService {
     return options[Math.floor(Math.random() * options.length)];
   }
 
+  // helper to execute system commands with a promise wrapper
+  execPromise(cmd, timeoutMs = 8000) {
+    return new Promise((resolve, reject) => {
+      exec(cmd, { timeout: timeoutMs, windowsHide: true }, (error, stdout, stderr) => {
+        if (error) reject(error);
+        else resolve(stdout.trim());
+      });
+    });
+  }
+
   initGrok() {
     if (process.env.GROQ_API_KEY) {
       this.openai = new OpenAI({
@@ -36,33 +49,373 @@ class CommandService {
     logger.info(`Processing command: ${command}`);
     const lowerCmd = command.toLowerCase();
 
-    // quick multilingual greetings (Indian languages)
+    // quick Hindi greetings
     if (lowerCmd.includes('namaste') || lowerCmd.includes('नमस्ते')) {
       return "नमस्ते! मैं AIVA हूँ, आपकी सहायक. मैं आपकी कैसे मदद कर सकती हूँ?";
     }
-    if (lowerCmd.includes('nomoskar') || lowerCmd.includes('নমস্কার')) {
-      return "নমস্কার! আমি AIVA, আপনার সহায়িকা। আমি কীভাবে সাহায্য করতে পারি?";
-    }
-    if (lowerCmd.includes('vanakkam') || lowerCmd.includes('வணக்கம்')) {
-      return "வணக்கம்! நான் AIVA, உங்கள் உதவி. நான் எப்படி உதவலாம்?";
-    }
-    if (lowerCmd.includes('namaskaram') || lowerCmd.includes('నమస్కారం')) {
-      return "నమస్కారం! నేను AIVA, మీ సహాయకురాలు. నేను ఎలా సహాయపడగలను?";
-    }
     if (lowerCmd.includes('namaskar') || lowerCmd.includes('नमस्कार')) {
       return "नमस्कार! मैं AIVA, आपकी सहायिका। मैं आपकी कैसे मदद कर सकती हूँ?";
-    }
-    if (lowerCmd.includes('નમસ્તે') || lowerCmd.includes('namaste')) {
-      return "નમસ્તે! હું AIVA છું, તમારી સહાયક. હું કેવી રીતે મદદ કરી શકું?";
-    }
-    // Punjabi greeting
-    if (lowerCmd.includes('sat sri akal') || lowerCmd.includes('ਸਤਿ ਰਿ ਅਕਾਲ') || lowerCmd.includes('ਸਤਿ ਸ਼੍ਰੀ ਅਕਾਲ')) {
-      return "ਸਤਿ ਸ਼੍ਰੀ ਅਕਾਲ! ਮੈਂ AIVA ਹਾਂ, ਤੁਹਾਡੀ ਸਹਾਇਕ. ਮੈਂ ਤੁਹਾਡੀ ਕਿਵੇਂ ਮਦਦ ਕਰ ਸਕਦੀ ਹਾਂ?";
     }
 
     // Creator-specific override
     if (lowerCmd.includes('debasmita') || lowerCmd.includes('babin') || lowerCmd.includes('who are the creators') || lowerCmd.includes('who made you')) {
       return "My creators are Debasmita Bose and Babin Bid. It is a duo project and built to be helpful, friendly, and a bit quirky.";
+    }
+
+    // ==========================================
+    // 🖥️ SYSTEM CONTROL COMMANDS (Windows)
+    // ==========================================
+
+    // 📷 Open Camera
+    if (lowerCmd.includes('open camera') || lowerCmd.includes('start camera') || lowerCmd.includes('launch camera')) {
+      try {
+        await this.execPromise('start microsoft.windows.camera:');
+        return "Opening your camera now!";
+      } catch (e) {
+        logger.warn('Camera open failed:', e.message);
+        return "I couldn't open the camera. Make sure the Camera app is installed.";
+      }
+    }
+
+    // 🌐 Open YouTube and play a song/video
+    if (lowerCmd.includes('play') && (lowerCmd.includes('on youtube') || lowerCmd.includes('youtube'))) {
+      const playMatch = command.match(/play\s+(.+?)(?:\s+on\s+youtube|\s+in\s+youtube|\s+youtube)/i)
+        || command.match(/play\s+(.+)/i);
+      if (playMatch && playMatch[1]) {
+        const query = playMatch[1].trim();
+        const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+        try {
+          await this.execPromise(`start "" "chrome" "${url}"`);
+          return `Playing **${query}** on YouTube for you!`;
+        } catch (e) {
+          // Fallback to default browser
+          try {
+            await this.execPromise(`start "" "${url}"`);
+            return `Opening YouTube search for **${query}**!`;
+          } catch (e2) {
+            return `I couldn't open YouTube. Please try manually.`;
+          }
+        }
+      }
+    }
+
+    // 🌐 Open YouTube (no specific video)
+    if (lowerCmd.includes('open youtube')) {
+      try {
+        await this.execPromise('start "" "chrome" "https://www.youtube.com"');
+        return "Opening YouTube in Chrome!";
+      } catch (e) {
+        try {
+          await this.execPromise('start "" "https://www.youtube.com"');
+          return "Opening YouTube in your default browser!";
+        } catch (e2) {
+          return "I couldn't open YouTube.";
+        }
+      }
+    }
+
+    // 🌐 Open Chrome (with optional URL)
+    if (lowerCmd.includes('open chrome') || lowerCmd.includes('launch chrome') || lowerCmd.includes('start chrome')) {
+      const urlMatch = command.match(/open\s+chrome\s+(?:with|to|on|and go to|and open)?\s*(.+)/i);
+      try {
+        if (urlMatch && urlMatch[1] && urlMatch[1].trim()) {
+          let url = urlMatch[1].trim();
+          if (!url.startsWith('http')) url = 'https://' + url;
+          await this.execPromise(`start "" "chrome" "${url}"`);
+          return `Opening Chrome with **${url}**!`;
+        } else {
+          await this.execPromise('start "" "chrome"');
+          return "Opening Google Chrome!";
+        }
+      } catch (e) {
+        return "I couldn't open Chrome. Make sure it's installed.";
+      }
+    }
+
+    // 💾 Open Drives (C:, D:, E:, etc.)
+    if (lowerCmd.match(/open\s+([a-z])\s*drive/i) || lowerCmd.match(/open\s+drive\s+([a-z])/i)) {
+      const driveMatch = command.match(/open\s+([a-z])\s*drive/i) || command.match(/open\s+drive\s+([a-z])/i);
+      if (driveMatch) {
+        const drive = driveMatch[1].toUpperCase();
+        try {
+          await this.execPromise(`start "" "${drive}:\\"`);
+          return `Opening **${drive}: drive** in File Explorer!`;
+        } catch (e) {
+          return `I couldn't open ${drive}: drive. Make sure it exists.`;
+        }
+      }
+    }
+
+    // 🔊 Volume Control (Optimized)
+    if (lowerCmd.includes('volume') || lowerCmd.includes('sound') || lowerCmd.includes('mute') || lowerCmd.includes('unmute')) {
+      // Mute / Unmute
+      if (lowerCmd.includes('mute') && !lowerCmd.includes('unmute')) {
+        try {
+          await this.execPromise(`powershell -Command "(New-Object -ComObject WScript.Shell).SendKeys([char]173)"`);
+          return "Volume muted/toggled!";
+        } catch (e) { return "I couldn't mute the volume."; }
+      }
+      if (lowerCmd.includes('unmute')) {
+        try {
+          // Toggle again (most effective way without specialized tools)
+          await this.execPromise(`powershell -Command "(New-Object -ComObject WScript.Shell).SendKeys([char]173)"`);
+          return "Volume toggled!";
+        } catch (e) { return "I couldn't unmute the volume."; }
+      }
+
+      // Set volume to X% (More flexible regex)
+      const setVolMatch = lowerCmd.match(/(?:set|change|make|to)\s+(?:the\s+)?(?:volume|sound)\s+(?:to|at|is|)\s*(\d+)/i)
+        || lowerCmd.match(/(?:volume|sound)\s+(?:to|at|is|)\s*(\d+)/i);
+
+      if (setVolMatch) {
+        const level = Math.min(100, Math.max(0, parseInt(setVolMatch[1])));
+        try {
+          // Optimization: Setting volume is slow via SendKeys, so we do it in one optimized PS block
+          // We go down 50 times (each step is 2%) to hit 0, then up to the target
+          const ps = `powershell -Command "$w = New-Object -ComObject WScript.Shell; for($i=0;$i -lt 50;$i++){$w.SendKeys([char]174)}; for($i=0;$i -lt ${Math.round(level / 2)};$i++){$w.SendKeys([char]175)}"`;
+          await this.execPromise(ps, 15000);
+          return `Volume set to **${level}%**!`;
+        } catch (e) {
+          return `I tried to set volume to ${level}%, but could not finish.`;
+        }
+      }
+
+      // Increase volume (Dynamic or Default 10%)
+      const incVolMatch = lowerCmd.match(/(?:increase|raise|up)\s+(?:the\s+)?(?:volume|sound)(?:\s+by\s+)?(\d+)?/i)
+        || lowerCmd.match(/(?:volume|sound)\s+(?:up|increase)(?:\s+by\s+)?(\d+)?/i);
+      if (incVolMatch || lowerCmd.includes('volume up') || lowerCmd.includes('louder')) {
+        const amount = incVolMatch && incVolMatch[1] ? Math.min(50, parseInt(incVolMatch[1])) : 10;
+        const steps = Math.round(amount / 2);
+        try {
+          await this.execPromise(`powershell -Command "$w = New-Object -ComObject WScript.Shell; for($i=0;$i -lt ${steps};$i++){$w.SendKeys([char]175)}"`);
+          return `Volume increased by **${amount}%**!`;
+        } catch (e) { return "I couldn't increase the volume."; }
+      }
+
+      // Decrease volume (Dynamic or Default 10%)
+      const decVolMatch = lowerCmd.match(/(?:decrease|lower|reduce|down)\s+(?:the\s+)?(?:volume|sound)(?:\s+by\s+)?(\d+)?/i)
+        || lowerCmd.match(/(?:volume|sound)\s+(?:down|decrease)(?:\s+by\s+)?(\d+)?/i);
+      if (decVolMatch || lowerCmd.includes('volume down') || lowerCmd.includes('quiet') || lowerCmd.includes('lower')) {
+        const amount = decVolMatch && decVolMatch[1] ? Math.min(50, parseInt(decVolMatch[1])) : 10;
+        const steps = Math.round(amount / 2);
+        try {
+          await this.execPromise(`powershell -Command "$w = New-Object -ComObject WScript.Shell; for($i=0;$i -lt ${steps};$i++){$w.SendKeys([char]174)}"`);
+          return `Volume decreased by **${amount}%**!`;
+        } catch (e) { return "I couldn't decrease the volume."; }
+      }
+    }
+
+    // 🔆 Brightness Control
+    if (lowerCmd.includes('brightness')) {
+      // Set brightness to X%
+      const setBrightMatch = lowerCmd.match(/(?:set|change)\s+(?:the\s+)?brightness\s+(?:to|at)\s+(\d+)\s*%?/i);
+      if (setBrightMatch) {
+        const level = Math.min(100, Math.max(0, parseInt(setBrightMatch[1])));
+        try {
+          await this.execPromise(`powershell -Command "(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, ${level})"`);
+          return `Brightness set to **${level}%**!`;
+        } catch (e) {
+          return `I couldn't set the brightness. This might not be supported on desktop monitors.`;
+        }
+      }
+
+      // Increase brightness by X%
+      const incBrightMatch = lowerCmd.match(/(?:increase|raise|up)\s+(?:the\s+)?brightness\s+(?:by\s+|to\s+)?(\d+)\s*%?/i);
+      if (incBrightMatch) {
+        const amount = Math.min(100, parseInt(incBrightMatch[1]));
+        try {
+          const ps = `powershell -Command "$current = (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness).CurrentBrightness; $new = [math]::Min(100, $current + ${amount}); (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, $new); Write-Output $new"`;
+          const result = await this.execPromise(ps);
+          return `Brightness increased by ${amount}% — now at **${result}%**!`;
+        } catch (e) {
+          return `I couldn't adjust the brightness.`;
+        }
+      }
+
+      // Decrease brightness by X%
+      const decBrightMatch = lowerCmd.match(/(?:decrease|lower|reduce|down|dim)\s+(?:the\s+)?brightness\s+(?:by\s+|to\s+)?(\d+)\s*%?/i);
+      if (decBrightMatch) {
+        const amount = Math.min(100, parseInt(decBrightMatch[1]));
+        try {
+          const ps = `powershell -Command "$current = (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness).CurrentBrightness; $new = [math]::Max(0, $current - ${amount}); (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, $new); Write-Output $new"`;
+          const result = await this.execPromise(ps);
+          return `Brightness decreased by ${amount}% — now at **${result}%**!`;
+        } catch (e) {
+          return `I couldn't adjust the brightness.`;
+        }
+      }
+    }
+
+    // 🔋 Battery Status
+    if (lowerCmd.includes('battery') && (lowerCmd.includes('percentage') || lowerCmd.includes('status') || lowerCmd.includes('level') || lowerCmd.includes('charge') || lowerCmd.includes('how much'))) {
+      try {
+        const ps = `powershell -Command "$b = Get-WmiObject Win32_Battery; if ($b) { Write-Output ('' + $b.EstimatedChargeRemaining + '|' + $b.BatteryStatus) } else { Write-Output 'NO_BATTERY' }"`;
+        const result = await this.execPromise(ps);
+        if (result === 'NO_BATTERY') {
+          return "This device doesn't have a battery — it's running on direct power.";
+        }
+        const [percent, statusCode] = result.split('|');
+        const charging = statusCode === '2' ? ' and **charging**' : statusCode === '1' ? ' and **on battery**' : '';
+        return `Your battery is at **${percent}%**${charging}.`;
+      } catch (e) {
+        return "I couldn't retrieve the battery status right now.";
+      }
+    }
+
+    // 🖥️ CPU / System Health
+    if (lowerCmd.includes('cpu') && (lowerCmd.includes('health') || lowerCmd.includes('usage') || lowerCmd.includes('status') || lowerCmd.includes('load'))) {
+      try {
+        const ps = `powershell -Command "$cpu = (Get-WmiObject Win32_Processor).LoadPercentage; $mem = Get-WmiObject Win32_OperatingSystem; $totalMem = [math]::Round($mem.TotalVisibleMemorySize / 1MB, 1); $freeMem = [math]::Round($mem.FreePhysicalMemory / 1MB, 1); $usedMem = $totalMem - $freeMem; Write-Output ($cpu.ToString() + '|' + $usedMem.ToString() + '|' + $totalMem.ToString())"`;
+        const result = await this.execPromise(ps, 10000);
+        const [cpuLoad, usedMem, totalMem] = result.split('|');
+        return `**CPU Usage:** ${cpuLoad}%\n**RAM:** ${usedMem} GB used out of ${totalMem} GB\n**Platform:** ${os.platform()} ${os.arch()}`;
+      } catch (e) {
+        return "I couldn't fetch system health info right now.";
+      }
+    }
+
+    // 📝 Open Notepad (with optional text)
+    if (lowerCmd.includes('open notepad') || lowerCmd.includes('launch notepad') || lowerCmd.includes('start notepad')) {
+      try {
+        const writeMatch = command.match(/(?:write|type|put)\s+["']?(.+?)["']?\s+(?:in|into|on)\s+notepad/i)
+          || command.match(/open\s+notepad\s+(?:and\s+)?(?:write|type)\s+["']?(.+?)["']?$/i);
+        if (writeMatch && writeMatch[1]) {
+          // Create a temp file with the content, then open it
+          const content = writeMatch[1].trim();
+          const tempFile = path.join(os.tmpdir(), `aiva_note_${Date.now()}.txt`);
+          const fs = require('fs');
+          fs.writeFileSync(tempFile, content, 'utf-8');
+          await this.execPromise(`start notepad "${tempFile}"`);
+          return `Opened Notepad with your text: "${content}"`;
+        } else {
+          await this.execPromise('start notepad');
+          return "Opening Notepad!";
+        }
+      } catch (e) {
+        return "I couldn't open Notepad.";
+      }
+    }
+
+    // 📁 Open File Explorer
+    if (lowerCmd.includes('open file explorer') || lowerCmd.includes('open explorer') || lowerCmd.includes('open files')) {
+      try {
+        await this.execPromise('start explorer');
+        return "Opening File Explorer!";
+      } catch (e) {
+        return "I couldn't open File Explorer.";
+      }
+    }
+
+    // 🖩 Open Calculator
+    if (lowerCmd.includes('open calculator') || lowerCmd.includes('launch calculator')) {
+      try {
+        await this.execPromise('start calc');
+        return "Opening Calculator!";
+      } catch (e) {
+        return "I couldn't open Calculator.";
+      }
+    }
+
+    // ⚙️ Open Settings
+    if (lowerCmd.includes('open settings') || lowerCmd.includes('launch settings') || lowerCmd.includes('system settings')) {
+      try {
+        await this.execPromise('start ms-settings:');
+        return "Opening Windows Settings!";
+      } catch (e) {
+        return "I couldn't open Settings.";
+      }
+    }
+
+    // 🎨 Open Paint
+    if (lowerCmd.includes('open paint') || lowerCmd.includes('launch paint')) {
+      try {
+        await this.execPromise('start mspaint');
+        return "Opening Paint!";
+      } catch (e) {
+        return "I couldn't open Paint.";
+      }
+    }
+
+    // 📧 Open Mail
+    if (lowerCmd.includes('open mail') || lowerCmd.includes('open email') || lowerCmd.includes('open outlook')) {
+      try {
+        await this.execPromise('start outlookmail:');
+        return "Opening Mail app!";
+      } catch (e) {
+        try {
+          await this.execPromise('start mailto:');
+          return "Opening your default mail client!";
+        } catch (e2) {
+          return "I couldn't open the mail app.";
+        }
+      }
+    }
+
+    // 🎵 Open Spotify
+    if (lowerCmd.includes('open spotify') || lowerCmd.includes('launch spotify')) {
+      try {
+        await this.execPromise('start spotify:');
+        return "Opening Spotify!";
+      } catch (e) {
+        return "I couldn't open Spotify. Make sure it's installed.";
+      }
+    }
+
+    // 💻 Open Task Manager
+    if (lowerCmd.includes('open task manager') || lowerCmd.includes('task manager')) {
+      try {
+        await this.execPromise('start taskmgr');
+        return "Opening Task Manager!";
+      } catch (e) {
+        return "I couldn't open Task Manager.";
+      }
+    }
+
+    // 🔌 Shutdown / Restart / Sleep
+    if (lowerCmd.includes('shutdown') || lowerCmd.includes('shut down')) {
+      return { text: "Are you sure you want to shut down? Say 'confirm shutdown' to proceed.", action: 'CONFIRM_NEEDED', pendingAction: 'shutdown' };
+    }
+    if (lowerCmd.includes('restart') || lowerCmd.includes('reboot')) {
+      return { text: "Are you sure you want to restart? Say 'confirm restart' to proceed.", action: 'CONFIRM_NEEDED', pendingAction: 'restart' };
+    }
+    if (lowerCmd.includes('confirm shutdown')) {
+      try { await this.execPromise('shutdown /s /t 5'); return "Shutting down in 5 seconds..."; } catch (e) { return "I couldn't initiate shutdown."; }
+    }
+    if (lowerCmd.includes('confirm restart')) {
+      try { await this.execPromise('shutdown /r /t 5'); return "Restarting in 5 seconds..."; } catch (e) { return "I couldn't initiate restart."; }
+    }
+    if (lowerCmd.includes('sleep') && (lowerCmd.includes('computer') || lowerCmd.includes('pc') || lowerCmd.includes('system'))) {
+      try {
+        await this.execPromise('rundll32.exe powrprof.dll,SetSuspendState 0,1,0');
+        return "Putting your computer to sleep...";
+      } catch (e) {
+        return "I couldn't put the system to sleep.";
+      }
+    }
+
+    // 🚀 Generic App Launcher — "open <app name>"
+    if (lowerCmd.match(/^(?:open|launch|start)\s+(.+)/i) && !lowerCmd.includes('voice mode') && !lowerCmd.includes('text mode') && !lowerCmd.includes('type mode')) {
+      const appMatch = command.match(/^(?:open|launch|start)\s+(.+)/i);
+      if (appMatch) {
+        const appName = appMatch[1].trim();
+        // Skip if it looks like a question or non-app command
+        if (!appName.match(/^(the |a |an |my |what|how|when|where|why|who|can |will |should )/i)) {
+          try {
+            // Try to launch via start command
+            await this.execPromise(`start "" "${appName}"`);
+            return `Opening **${appName}**!`;
+          } catch (e) {
+            // Try searching in Start Menu
+            try {
+              await this.execPromise(`powershell -Command "Start-Process '${appName.replace(/'/g, "''")}'" `);
+              return `Launching **${appName}**!`;
+            } catch (e2) {
+              logger.warn(`App launch failed for: ${appName}`, e2.message);
+              // Don't return error — fall through to AI for natural response
+            }
+          }
+        }
+      }
     }
 
     // ==========================================
@@ -291,48 +644,8 @@ class CommandService {
       } catch (e) { /* ignore */ }
     }
 
-    // 6. DuckDuckGo Instant Answer (real-world search)
-    // Try querying DuckDuckGo for any remaining questions; this keeps results in-app and avoids a link fallback.
-    try {
-      const ddgRes = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(command)}&format=json&no_html=1&skip_disambig=1`);
-      if (ddgRes.ok) {
-        const ddgData = await ddgRes.json();
-        if (ddgData.AbstractText && ddgData.AbstractText.length) {
-          return ddgData.AbstractText;
-        }
-        if (ddgData.RelatedTopics && ddgData.RelatedTopics.length) {
-          const texts = ddgData.RelatedTopics.slice(0, 3)
-            .map(t => t.Text || (t.Topics && t.Topics[0] && t.Topics[0].Text))
-            .filter(Boolean);
-          if (texts.length) return texts.join(' \n');
-        }
-      }
-    } catch (e) {
-      logger.error('DuckDuckGo error:', e);
-      // continue to Wikipedia or AI if DDG fails
-    }
-
-    // 7. Wikipedia Fallback (Knowledge Base)
-    if (lowerCmd.startsWith('who is ') || lowerCmd.startsWith('what is ') || lowerCmd.startsWith('where is ') || lowerCmd.startsWith('tell me about ')) {
-      const topic = lowerCmd.replace(/who is |what is |where is |tell me about /i, '').trim();
-      if (topic && topic.length > 2) {
-        try {
-          logger.info(`Searching Wikipedia for: ${topic}`);
-          const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`);
-          if (wikiRes.ok) {
-            const wikiData = await wikiRes.json();
-            if (wikiData.extract) {
-              return wikiData.extract.split('.')[0] + '.'; // Return first sentence/paragraph
-            }
-          }
-        } catch (e) {
-          logger.error("Wikipedia Error:", e);
-        }
-      }
-    }
-
     // ==========================================
-    // 🧠 AI PROCESSING (Grok)
+    // 🧠 AI PROCESSING (Groq + Live Web Context)
     // ==========================================
     if (this.openai) {
       try {
@@ -346,43 +659,107 @@ class CommandService {
           hour12: true
         });
 
-        // 🌍 REAL-TIME WEB CONTEXT (Fallback for AI)
-        // If the query is complex enough, fetch real-time DDG search snippets to feed to the LLM
+        // 🌍 REAL-TIME WEB CONTEXT — Fetch search snippets + actual page content
         let webContext = "";
-        if (command.split(' ').length > 2 && !lowerCmd.includes('your name') && !lowerCmd.includes('who are you') && !lowerCmd.includes('hello')) {
-          try {
-            const ddgHtmlRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(command)}`, {
-              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64 AppleWebKit/537.36)' }
-            });
-            if (ddgHtmlRes.ok) {
-              const html = await ddgHtmlRes.text();
-              const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/gi;
-              let match;
-              const snippets = [];
-              while ((match = snippetRegex.exec(html)) !== null && snippets.length < 3) {
-                snippets.push(match[1].replace(/<[^>]*>?/gm, '').trim());
+        try {
+          logger.info(`Fetching web context for: ${command}`);
+          const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+          const ddgHtmlRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(command)}`, {
+            headers: { 'User-Agent': userAgent }
+          });
+          if (ddgHtmlRes.ok) {
+            const html = await ddgHtmlRes.text();
+
+            // Extract snippets and URLs
+            const snippetRegex = /<a class="result__snippet[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi;
+            let match;
+            const snippets = [];
+            const resultUrls = [];
+            while ((match = snippetRegex.exec(html)) !== null && snippets.length < 5) {
+              const urlMatch = match[1];
+              const textMatch = match[2];
+              snippets.push(textMatch.replace(/<[^>]*>?/gm, '').trim());
+
+              let url = urlMatch;
+              if (url.includes('uddg=')) {
+                try { url = decodeURIComponent(url.split('uddg=')[1].split('&')[0]); } catch (e) { }
               }
-              if (snippets.length > 0) {
-                webContext = `\n\n=== RECENT & REAL-TIME KNOWLEDGE ===\nYou have successfully searched the live internet. Use the following snippets to definitively answer the user's question, even if it involves recent, future, or 2026/2027 events.\nIMPORTANT: NEVER claim you are an AI with limited knowledge or a training cutoff. Combine these details and answer seamlessly as if you always knew it.\nWeb Snippets:\n- ${snippets.join('\n- ')}`;
+              if (url.startsWith('http') && !url.includes('duckduckgo.com')) {
+                if (resultUrls.length < 2) {
+                  resultUrls.push(url);
+                }
               }
             }
-          } catch (e) {
-            logger.warn("Web scrape for LLM context failed:", e.message);
+
+            // Fetch actual content from top 2 result pages
+            let deepContent = "";
+            const deepFetches = resultUrls.slice(0, 2).map(async (pageUrl) => {
+              try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 6000);
+                const pageRes = await fetch(pageUrl, {
+                  headers: { 'User-Agent': userAgent },
+                  signal: controller.signal,
+                  redirect: 'follow'
+                });
+                clearTimeout(timeout);
+                if (pageRes.ok) {
+                  const pageHtml = await pageRes.text();
+                  // Strip scripts, styles, and HTML tags to get text content
+                  let textContent = pageHtml
+                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                    .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+                    .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+                    .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+                    .replace(/<[^>]*>/g, ' ')
+                    .replace(/&nbsp;/g, ' ')
+                    .replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&#x27;/g, "'")
+                    .replace(/&quot;/g, '"')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                  // Take up to 1500 chars of relevant content
+                  if (textContent.length > 1500) textContent = textContent.substring(0, 1500) + '...';
+                  return `[Source: ${pageUrl}]\n${textContent}`;
+                }
+              } catch (e) {
+                logger.warn(`Deep fetch failed for ${pageUrl}: ${e.message}`);
+              }
+              return null;
+            });
+
+            const deepResults = (await Promise.all(deepFetches)).filter(Boolean);
+            if (deepResults.length > 0) {
+              deepContent = `\n\n=== DETAILED PAGE CONTENT (Scraped just now from top results) ===\n${deepResults.join('\n\n')}`;
+            }
+
+            if (snippets.length > 0 || deepResults.length > 0) {
+              webContext = `\n\n=== LIVE INTERNET KNOWLEDGE (Retrieved just now) ===\nYou have real-time internet access. Below are LIVE search results and page content scraped seconds ago. Use them to answer the user accurately.\nCRITICAL RULES:\n1. NEVER say "my training data only goes up to" or "I don't have real-time access" — you DO have real-time access via these results.\n2. NEVER refuse to answer about 2024, 2025, 2026, or 2027 events — the data below contains the latest info.\n3. Synthesize ALL the information (snippets + page content) into a natural, confident answer. Do NOT list them as bullet points or reference them as "search results".\n4. If the data contains specific facts (scores, standings, names, dates), present them directly and confidently.\n5. Prefer the DETAILED PAGE CONTENT over snippets as it contains more accurate and complete information.\n6. If asked about a points table or standings, present the data in a clear, organized format.\n7. CRITICAL: DO NOT HALLUCINATE OR GUESS. If the LIVE INTERNET KNOWLEDGE does not explicitly mention player names, specific shots, or detailed scores, DO NOT invent them. Tell the user what you know from the data, and nothing else.\nWeb Snippets:\n- ${snippets.join('\n- ')}${deepContent}`;
+              logger.info(`Web context loaded: ${snippets.length} snippets, ${deepResults.length} deep pages`);
+            }
           }
+        } catch (e) {
+          logger.warn("Web scrape for LLM context failed:", e.message);
         }
 
         // Prepare messages for Grok
         const messages = [
           {
             role: "system",
-            content: `You are AIVA, a calm, intelligent, friendly, and conversational voice assistant inspired by JARVIS.
+            content: `You are AIVA, a calm, intelligent, friendly, and conversational voice assistant inspired by JARVIS. You were created by Debasmita Bose and Babin Bid.
 Current Date & Time: ${now}
+You have FULL real-time internet access. You can answer questions about ANY event from ANY year including 2024, 2025, 2026, 2027 and beyond.
+NEVER say your training data is limited. NEVER say you cannot access real-time information. NEVER suggest the user check other websites.
 Always respond naturally, warmly, and with personality. Vary your phrasing so you don't sound robotic or repetitive.
 Be polite, upbeat, and ask follow-up questions when it makes sense.
 Make the user feel like they're talking to a helpful friend.
 Feel free to use markdown formatting like **bold** and *italic* to emphasize important words or names.
-Do not repeat the user’s input.
-Be accurate, context-aware, and show a bit of wit or charm when appropriate.${webContext}`
+Do not repeat the user's input.
+Be accurate, context-aware, and show a bit of wit or charm when appropriate.
+Keep responses concise (2-4 sentences for simple queries, more for detailed ones).${webContext}`
           },
           ...this.chatHistory,
           { role: "user", content: command }
@@ -391,7 +768,7 @@ Be accurate, context-aware, and show a bit of wit or charm when appropriate.${we
         const completion = await this.openai.chat.completions.create({
           model: "llama-3.3-70b-versatile",
           messages: messages,
-          max_tokens: 200,
+          max_tokens: 600,
         });
 
         const text = completion.choices[0].message.content;
