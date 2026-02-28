@@ -23,8 +23,8 @@ class VisionService {
                         parts: [
                             { text: "Analyze the facial expression in this image. Respond with only ONE of these moods: HAPPY, SAD, ANGRY, CALM, SURPRISED, TIRED." },
                             {
-                                inline_data: {
-                                    mime_type: "image/jpeg",
+                                inlineData: {
+                                    mimeType: "image/jpeg",
                                     data: base64Data
                                 }
                             }
