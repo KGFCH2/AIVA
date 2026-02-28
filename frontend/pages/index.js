@@ -614,7 +614,11 @@ export default function Home() {
                 <div className="chat-msg bot">
                   <div className="avatar"><Bot size={16} /></div>
                   <div className="bubble">
-                    <p style={{ opacity: 0.6, fontStyle: 'italic' }}>Thinking<span className="blink">...</span></p>
+                    <div className="thinking-wave">
+                      <div className="dot"></div>
+                      <div className="dot"></div>
+                      <div className="dot"></div>
+                    </div>
                   </div>
                 </div>
               )}
