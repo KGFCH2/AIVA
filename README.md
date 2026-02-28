@@ -15,7 +15,7 @@
 
 - 🗣️ **Voice command input** using Web Speech API (speech recognition)
 - 🔊 **Text-to-speech replies** with dynamic voices
-- 🌍 **Multilingual greetings** — Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, Punjabi & English
+- 🌍 **Bilingual greetings & interaction** — English and Hindi (featuring 1 Male & 1 Female Hindi voice)
 - 🎯 **Smart voice selection** — voices grouped by language with Indian accent prioritization
 - 🌦️ **Enhanced weather lookup** with OpenWeatherMap & WeatherAPI fallback
 - 🏏 **Live Sports Scores** — CricketData & API-Football integration
@@ -36,6 +36,7 @@
 1. 📂 Navigate to `backend/` directory
 2. 📦 Install dependencies: `npm install`
 3. ⚙️ Configure `.env`:
+
    ```env
    PORT=5000
    GROQ_API_KEY=your_groq_api_key_here
@@ -45,6 +46,7 @@
    SPORTS_API_KEY=your_sports_key
    NEWS_API_KEY=your_gnews_key
    ```
+
 4. ▶️ Run: `node server.js`
 
 ### 🖥️ Frontend
@@ -90,4 +92,4 @@
 
 ---
 
-*💜 Built with love by **Debasmita Bose and Babin Bid***
+*💜 Built for practice and contribution to projects by **Debasmita Bose and Babin Bid***
