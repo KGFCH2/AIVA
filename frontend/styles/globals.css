@@ -787,9 +787,36 @@ body::before {
 .chat-msg .timestamp {
   font-size: 0.62rem;
   color: var(--text-dim);
-  margin-top: 5px;
-  text-align: right;
   font-family: var(--font-mono);
+}
+
+.msg-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.copy-msg-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.chat-msg:hover .copy-msg-btn {
+  opacity: 0.6;
+}
+
+.copy-msg-btn:hover {
+  color: var(--primary);
+  opacity: 1 !important;
 }
 
 /* Empty chat */
@@ -1346,53 +1373,6 @@ body::before {
   .suggestion-chip {
     font-size: 0.72rem;
     padding: 6px 12px;
-  }
-}
-
-/* 🔊 Wake Word Control */
-.wake-word-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 6px 12px;
-  border-radius: 20px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border: 1px solid transparent;
-  margin-right: 12px;
-}
-
-.wake-word-control.active {
-  background: rgba(0, 243, 255, 0.1);
-  border-color: var(--primary);
-  color: var(--primary);
-  box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
-}
-
-.wake-word-control:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.icon-pulse {
-  animation: pulse-glow 1.5s infinite ease-in-out;
-}
-
-@keyframes pulse-glow {
-  0% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-
-  50% {
-    transform: scale(1.2);
-    opacity: 1;
-    text-shadow: 0 0 8px var(--primary);
-  }
-
-  100% {
-    transform: scale(1);
-    opacity: 0.8;
   }
 }
 
