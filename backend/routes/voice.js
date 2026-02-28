@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const commandService = require("../services/commandService");
+const visionService = require("../services/visionService");
 const auth = require("../middleware/auth");
 
 // POST /api/voice
@@ -26,6 +27,19 @@ router.post("/", auth, async (req, res) => {
     }
   } catch (error) {
     console.error("Error processing command:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST /api/voice/mood
+router.post("/mood", auth, async (req, res) => {
+  try {
+    const { image } = req.body;
+    if (!image) return res.status(400).json({ error: "No image provided" });
+    const result = await visionService.detectMood(image);
+    res.json(result);
+  } catch (error) {
+    console.error("Error processing mood:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
