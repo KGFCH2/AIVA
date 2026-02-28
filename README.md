@@ -90,4 +90,4 @@
 
 ---
 
-*💜 Built with love by **Debasmita Bose and Babin Bid***
+*💜 Built for practice and contribution to projects by **Debasmita Bose and Babin Bid***
