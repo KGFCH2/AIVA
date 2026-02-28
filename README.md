@@ -36,6 +36,7 @@
 1. 📂 Navigate to `backend/` directory
 2. 📦 Install dependencies: `npm install`
 3. ⚙️ Configure `.env`:
+
    ```env
    PORT=5000
    GROQ_API_KEY=your_groq_api_key_here
@@ -45,6 +46,7 @@
    SPORTS_API_KEY=your_sports_key
    NEWS_API_KEY=your_gnews_key
    ```
+
 4. ▶️ Run: `node server.js`
 
 ### 🖥️ Frontend
