@@ -984,16 +984,21 @@ body::before {
   overflow: hidden;
 }
 
-.start-overlay::before {
-  content: '';
+.start-bg-layer {
   position: absolute;
   inset: -10%;
-  background-image: url('/aiva_bg1.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   filter: brightness(0.6) blur(2px);
   z-index: -1;
+  opacity: 0;
+  transition: opacity 2.5s ease-in-out;
+  pointer-events: none;
+}
+
+.start-bg-layer.active {
+  opacity: 1;
   animation: cinematic-pan 30s ease-in-out infinite alternate;
 }
 
