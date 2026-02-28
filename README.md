@@ -25,6 +25,8 @@
 - 🔒 **Secure API** via `x-api-key` header (bypassed in dev mode)
 - 🎨 **Futuristic theme** — glassmorphism, neon glows, hacker-style boot loader
 - 🧠 **AI Powered** — Llama 3.3 70B through Groq API
+- 🔊 **Wake Word Listener** — Active "Hey AIVA" recognition for hands-free start
+- 🎭 **Facial Mood Recognition** — Analyze your face via camera to adjust AIVA's personality (Powered by Gemini Vision)
 - 🎭 **Lucide Icons** — professional icon set throughout the UI
 
 ---
@@ -96,8 +98,8 @@
 |-------|-----------|
 | 🖥️ Frontend | Next.js 14, React 18, Lucide Icons |
 | 🔙 Backend | Express.js, OpenAI SDK (Groq) |
-| 🧠 AI Model | Llama 3.3 70B Versatile |
-| 🌐 APIs | Groq, wttr.in, Open-Meteo, DuckDuckGo, Wikipedia |
+| 🧠 AI Model | Llama 3.3 70B Versatile, Gemini 1.5 Flash |
+| 🌐 APIs | Groq, Gemini Vision, OpenWeather, GNews |
 | 🗣️ Speech | Web Speech API (Recognition + Synthesis) |
 | 🔤 Fonts | Chakra Petch, Space Grotesk, Orbitron, JetBrains Mono |
 
