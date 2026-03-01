@@ -375,6 +375,12 @@ class CommandService {
       }
     }
 
+    let cleanCmd = lowerCmd.replace(/[^a-z0-9\s]/gi, '').trim();
+    if (cleanCmd === 'hello' || cleanCmd === 'hey' || cleanCmd === 'hii' || cleanCmd === 'yo' || cleanCmd === 'hi') {
+      const fallbacks = ["Hi! How can I assist you?", "Hello! AIVA is ready.", "Hi! Debasmita and Babin made me fully operational."];
+      return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    }
+
     // ==========================================
     // 🏠 LOCAL JSON RESPONSES (No API Quota Used)
     // ==========================================
@@ -386,8 +392,6 @@ class CommandService {
     } catch (e) { }
 
     // Trim punctuation to perfectly hit JSON keys (e.g. "hi." must trigger key "hi")
-    let cleanCmd = lowerCmd.replace(/[^a-z0-9\s]/gi, '').trim();
-
     // Explicit dictionary remaps for massively common greetings so they reliably hit the fast-cache
     if (cleanCmd === 'hello' || cleanCmd === 'hey' || cleanCmd === 'hii' || cleanCmd === 'yo') {
       cleanCmd = 'hi';
@@ -500,11 +504,16 @@ Keep responses concise (2-4 sentences for simple queries, more for detailed ones
               generationConfig: { maxOutputTokens: 600 }
             };
 
+            const controller = new AbortController();
+            const fetchTimeout = setTimeout(() => controller.abort(), 12000);
+
             const gRes = await fetch(geminiUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
+              body: JSON.stringify(payload),
+              signal: controller.signal
             });
+            clearTimeout(fetchTimeout);
 
             if (gRes.ok) {
               const gData = await gRes.json();
@@ -515,11 +524,17 @@ Keep responses concise (2-4 sentences for simple queries, more for detailed ones
               logger.warn("Gemini limit exceeded. Retrying once after 10 seconds...");
               // 10 second retry
               await new Promise(resolve => setTimeout(resolve, 10000));
+
+              const retryCtrl = new AbortController();
+              const retryTimeout = setTimeout(() => retryCtrl.abort(), 12000);
               const retryRes = await fetch(geminiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: retryCtrl.signal
               });
+              clearTimeout(retryTimeout);
+
               if (retryRes.ok) {
                 const retryData = await retryRes.json();
                 if (retryData.candidates && retryData.candidates[0].content && retryData.candidates[0].content.parts[0].text) {
