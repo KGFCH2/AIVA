@@ -15,16 +15,19 @@
 
 - 🗣️ **Voice command input** using Web Speech API (speech recognition)
 - 🔊 **Text-to-speech replies** with dynamic voices
-- 🌍 **Bilingual greetings & interaction** — English and Hindi (featuring 1 Male & 1 Female Hindi voice)
-- 🎯 **Smart voice selection** — voices grouped by language with Indian accent prioritization
+- 🌍 **Vast Multilingual Support** — Understands and speaks English, Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, Punjabi, and Urdu
+- 🎯 **Smart Voice Routing** — Automatically detects the language spoken/written and seamlessly swaps out the Text-to-Speech accent to match the native region
 - 🌦️ **Enhanced weather lookup** with OpenWeatherMap & WeatherAPI fallback
 - 🏏 **Live Sports Scores** — CricketData & API-Football integration
 - 📰 **Headlines Delivery** via GNews API
+- 💻 **Native OS Control (Windows)** — Command AIVA to mute volume, lock screen, sleep PC, or empty the recycle bin
+- 📧 **Smart Email Drafting** — Tell AIVA to draft an email; it generates the content and opens your mail client ready to send
 - ⌨️ **Dynamic Input Modes** — Switch between Voice Mode and Text/Type Mode by speaking (e.g., "enable type mode")
 - 💬 **Chat-centric UI** — mic embedded in input bar, suggestion chips, timestamps, individual message copy, clear chat
 - 🔒 **Secure API** via `x-api-key` header (bypassed in dev mode)
 - 🎨 **Futuristic theme** — glassmorphism, neon glows, hacker-style boot loader
-- 🧠 **AI Powered** — Llama 3.3 70B through Groq API
+- 🧠 **Dual-Engine AI** — Gemini 1.5 Flash (Primary) falling back to Llama 3.3 70B via Groq
+- 🗃️ **Offline Greeting Lexicon** — Caches small-talk responses to intelligently save quota limits
 - 🎭 **Facial Mood Recognition** — Analyze your face via camera to adjust AIVA's personality (Powered by Gemini Vision)
 - 🎭 **Lucide Icons** — professional icon set throughout the UI
 
@@ -96,8 +99,8 @@
 | Layer | Technology |
 |-------|-----------|
 | 🖥️ Frontend | Next.js 14, React 18, Lucide Icons |
-| 🔙 Backend | Express.js, OpenAI SDK (Groq) |
-| 🧠 AI Model | Llama 3.3 70B Versatile, Gemini 1.5 Flash |
+| 🔙 Backend | Express.js, Node Fetch, Offline Lexicon Routing |
+| 🧠 AI Model | Gemini 1.5 Flash (Primary) / Llama 3.3 70B (Secondary) |
 | 🌐 APIs | Groq, Gemini Vision, OpenWeather, GNews |
 | 🗣️ Speech | Web Speech API (Recognition + Synthesis) |
 | 🔤 Fonts | Chakra Petch, Space Grotesk, Orbitron, JetBrains Mono |
