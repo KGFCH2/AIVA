@@ -3,7 +3,19 @@ const OpenAI = require('openai');
 const { exec } = require('child_process');
 const os = require('os');
 const path = require('path');
+const fs = require('fs');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+
+// Load local static responses to avoid API quotas
+const localResponsesPath = path.join(__dirname, '../data/responses.json');
+let localResponses = { greetings: {}, smalltalk: {} };
+if (fs.existsSync(localResponsesPath)) {
+  try {
+    localResponses = JSON.parse(fs.readFileSync(localResponsesPath, 'utf8'));
+  } catch (e) {
+    logger.error('Failed to parse local responses JSON', e);
+  }
+}
 
 // This service understands multiple Indian languages for basic greetings
 // and small talk.  Supported language keywords include Hindi, Bengali,
@@ -13,8 +25,9 @@ const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fet
 class CommandService {
   constructor() {
     this.openai = null;
+    this.geminiAvailable = !!process.env.GEMINI_API_KEY;
     this.chatHistory = []; // Store conversation history
-    this.initGrok();
+    this.initAI();
   }
 
   // helper to pick a random element from an array
@@ -33,15 +46,21 @@ class CommandService {
     });
   }
 
-  initGrok() {
+  initAI() {
     if (process.env.GROQ_API_KEY) {
       this.openai = new OpenAI({
         apiKey: process.env.GROQ_API_KEY,
         baseURL: "https://api.groq.com/openai/v1",
       });
-      logger.info('Groq API initialized.');
+      logger.info('Groq API initialized as fallback limit handler.');
     } else {
-      logger.warn('GROQ_API_KEY is not set. AI features will be disabled.');
+      logger.warn('GROQ_API_KEY is not set. Groq fallback disabled.');
+    }
+
+    if (this.geminiAvailable) {
+      logger.info('Gemini API identified for primary routing.');
+    } else {
+      logger.warn('GEMINI_API_KEY is not set. Will default to Groq if available.');
     }
   }
 
@@ -49,12 +68,27 @@ class CommandService {
     logger.info(`Processing command: ${command}`);
     const lowerCmd = command.toLowerCase();
 
-    // quick Hindi greetings
+    // quick Indian language offline fallback greetings
     if (lowerCmd.includes('namaste') || lowerCmd.includes('नमस्ते')) {
       return "नमस्ते! मैं AIVA हूँ, आपकी सहायक. मैं आपकी कैसे मदद कर सकती हूँ?";
     }
     if (lowerCmd.includes('namaskar') || lowerCmd.includes('नमस्कार')) {
       return "नमस्कार! मैं AIVA, आपकी सहायिका। मैं आपकी कैसे मदद कर सकती हूँ?";
+    }
+    if (lowerCmd.includes('kem cho') || lowerCmd.includes('કેમ છો')) {
+      return "હું મજામાં છું! હું AIVA છું, તમને કેવી રીતે મદદ કરી શકું?";
+    }
+    if (lowerCmd.includes('kemon acho') || lowerCmd.includes('কেমন আছো') || lowerCmd.includes('nomoshkar')) {
+      return "নমস্কার! আমি AIVA, আমি খুব ভালো আছি। আপনাকে কীভাবে সাহায্য করতে পারি?";
+    }
+    if (lowerCmd.includes('kasa ahes') || lowerCmd.includes('कसा आहेस') || lowerCmd.includes('namaskar') && lowerCmd.includes('aiva')) {
+      return "नमस्कार! मी AIVA आहे. मी तुम्हाला कशी मदत करू शकेन?";
+    }
+    if (lowerCmd.includes('vanakkam') || lowerCmd.includes('வணக்கம்')) {
+      return "வணக்கம்! நான் AIVA. நான் உங்களுக்கு எப்படி உதவ முடியும்?";
+    }
+    if (lowerCmd.includes('namaskaram') || lowerCmd.includes('నమస్కారం')) {
+      return "నమస్కారం! నేను AIVA. నేను మీకు ఎలా సహాయం చేయగలను?";
     }
 
     // Creator-specific override
@@ -63,358 +97,126 @@ class CommandService {
     }
 
     // ==========================================
-    // 🖥️ SYSTEM CONTROL COMMANDS (Windows)
+    // 🖥️ BROWSER-SAFE COMMANDS (Redirects / Web)
     // ==========================================
 
-    // 📷 Open Camera
-    if (lowerCmd.includes('open camera') || lowerCmd.includes('start camera') || lowerCmd.includes('launch camera')) {
-      try {
-        await this.execPromise('start microsoft.windows.camera:');
-        return "Opening your camera now!";
-      } catch (e) {
-        logger.warn('Camera open failed:', e.message);
-        return "I couldn't open the camera. Make sure the Camera app is installed.";
-      }
+    // 🌐 Socials / Apps (Handled as redirects for the browser)
+    if (lowerCmd.includes('open youtube')) {
+      return { text: "Opening YouTube...", action: 'REDIRECT', url: 'https://www.youtube.com' };
     }
-
-    // 🌐 Open YouTube and play a song/video
+    if (lowerCmd.includes('open google')) {
+      return { text: "Opening Google...", action: 'REDIRECT', url: 'https://www.google.com' };
+    }
+    if (lowerCmd.includes('open spotify')) {
+      return { text: "Opening Spotify Web...", action: 'REDIRECT', url: 'https://open.spotify.com' };
+    }
+    if (lowerCmd.includes('open mail') || lowerCmd.includes('open email')) {
+      return { text: "Opening Gmail for you...", action: 'REDIRECT', url: 'https://mail.google.com' };
+    }
     if (lowerCmd.includes('play') && (lowerCmd.includes('on youtube') || lowerCmd.includes('youtube'))) {
-      const playMatch = command.match(/play\s+(.+?)(?:\s+on\s+youtube|\s+in\s+youtube|\s+youtube)/i)
-        || command.match(/play\s+(.+)/i);
+      const playMatch = command.match(/play\s+(.+?)(?:\s+on\s+youtube|\s+in\s+youtube|\s+youtube)/i) || command.match(/play\s+(.+)/i);
       if (playMatch && playMatch[1]) {
         const query = playMatch[1].trim();
-        const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-        try {
-          await this.execPromise(`start "" "chrome" "${url}"`);
-          return `Playing **${query}** on YouTube for you!`;
-        } catch (e) {
-          // Fallback to default browser
-          try {
-            await this.execPromise(`start "" "${url}"`);
-            return `Opening YouTube search for **${query}**!`;
-          } catch (e2) {
-            return `I couldn't open YouTube. Please try manually.`;
-          }
+        return {
+          text: `Searching YouTube for **${query}**...`,
+          action: 'REDIRECT',
+          url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+        };
+      }
+    }
+
+    // ==========================================
+    // 💻 NATIVE OS COMMANDS (Windows Base)
+    // ==========================================
+    if (lowerCmd.includes('mute') && (lowerCmd.includes('volume') || lowerCmd.includes('audio') || lowerCmd.includes('sound'))) {
+      if (os.platform() === 'win32') {
+        this.execPromise('powershell -Command "(New-Object -ComObject WScript.Shell).SendKeys([char]173)"');
+        return "Muting the system volume.";
+      }
+      return "Native OS controls are currently only active on Windows environments.";
+    }
+
+    if (lowerCmd.includes('empty') && (lowerCmd.includes('recycle bin') || lowerCmd.includes('trash'))) {
+      if (os.platform() === 'win32') {
+        this.execPromise('powershell -Command "Clear-RecycleBin -Force"');
+        return "I have emptied the recycle bin for you.";
+      }
+      return "Native OS controls are currently only active on Windows environments.";
+    }
+
+    if (lowerCmd.includes('put') && lowerCmd.includes('sleep') && (lowerCmd.includes('computer') || lowerCmd.includes('pc') || lowerCmd.includes('system'))) {
+      if (os.platform() === 'win32') {
+        setTimeout(() => { this.execPromise('rundll32.exe powrprof.dll,SetSuspendState 0,1,0'); }, 2000);
+        return "Putting the computer to sleep now.";
+      }
+      return "Native OS controls are currently only active on Windows environments.";
+    }
+
+    if (lowerCmd.includes('lock') && (lowerCmd.includes('computer') || lowerCmd.includes('pc') || lowerCmd.includes('screen'))) {
+      if (os.platform() === 'win32') {
+        this.execPromise('rundll32.exe user32.dll,LockWorkStation');
+        return "Locking the workstation.";
+      }
+      return "Native OS controls are currently only active on Windows environments.";
+    }
+
+    if (lowerCmd.includes('shut down') || lowerCmd.includes('shutdown')) {
+      if (lowerCmd.includes('confirm') || lowerCmd.includes('yes')) {
+        if (os.platform() === 'win32') {
+          this.execPromise('shutdown /s /t 10');
+          return "Goodbye. Giving you 10 seconds to save your work before shutting down.";
         }
+        return "Native OS controls are currently only active on Windows environments.";
       }
+      return "Are you sure you want to physically shut down the computer? Say 'confirm shutdown' to proceed.";
     }
 
-    // 🌐 Open YouTube (no specific video)
-    if (lowerCmd.includes('open youtube')) {
-      try {
-        await this.execPromise('start "" "chrome" "https://www.youtube.com"');
-        return "Opening YouTube in Chrome!";
-      } catch (e) {
+    // ==========================================
+    // 📧 AI EMAIL DRAFTING
+    // ==========================================
+    if (lowerCmd.includes('draft an email') || lowerCmd.includes('write an email') || lowerCmd.includes('send an email')) {
+      // We use the AI to generate the draft, then open the local mail client!
+      logger.info("Email Drafting Triggered...");
+      const draftPrompt = `You are a professional email drafter. Write ONLY the email body text based on this request: "${command}". Do not include any greeting or conversational fluff from yourself, strictly output the email content ready to be pasted.`;
+
+      let aiDraftText = "";
+
+      // Fast-track through Gemini
+      if (this.geminiAvailable) {
         try {
-          await this.execPromise('start "" "https://www.youtube.com"');
-          return "Opening YouTube in your default browser!";
-        } catch (e2) {
-          return "I couldn't open YouTube.";
-        }
-      }
-    }
-
-    // 🌐 Open Chrome (with optional URL)
-    if (lowerCmd.includes('open chrome') || lowerCmd.includes('launch chrome') || lowerCmd.includes('start chrome')) {
-      const urlMatch = command.match(/open\s+chrome\s+(?:with|to|on|and go to|and open)?\s*(.+)/i);
-      try {
-        if (urlMatch && urlMatch[1] && urlMatch[1].trim()) {
-          let url = urlMatch[1].trim();
-          if (!url.startsWith('http')) url = 'https://' + url;
-          await this.execPromise(`start "" "chrome" "${url}"`);
-          return `Opening Chrome with **${url}**!`;
-        } else {
-          await this.execPromise('start "" "chrome"');
-          return "Opening Google Chrome!";
-        }
-      } catch (e) {
-        return "I couldn't open Chrome. Make sure it's installed.";
-      }
-    }
-
-    // 💾 Open Drives (C:, D:, E:, etc.)
-    if (lowerCmd.match(/open\s+([a-z])\s*drive/i) || lowerCmd.match(/open\s+drive\s+([a-z])/i)) {
-      const driveMatch = command.match(/open\s+([a-z])\s*drive/i) || command.match(/open\s+drive\s+([a-z])/i);
-      if (driveMatch) {
-        const drive = driveMatch[1].toUpperCase();
-        try {
-          await this.execPromise(`start "" "${drive}:\\"`);
-          return `Opening **${drive}: drive** in File Explorer!`;
-        } catch (e) {
-          return `I couldn't open ${drive}: drive. Make sure it exists.`;
-        }
-      }
-    }
-
-    // 🔊 Volume Control (Optimized)
-    if (lowerCmd.includes('volume') || lowerCmd.includes('sound') || lowerCmd.includes('mute') || lowerCmd.includes('unmute')) {
-      // Mute / Unmute
-      if (lowerCmd.includes('mute') && !lowerCmd.includes('unmute')) {
-        try {
-          await this.execPromise(`powershell -Command "(New-Object -ComObject WScript.Shell).SendKeys([char]173)"`);
-          return "Volume muted/toggled!";
-        } catch (e) { return "I couldn't mute the volume."; }
-      }
-      if (lowerCmd.includes('unmute')) {
-        try {
-          // Toggle again (most effective way without specialized tools)
-          await this.execPromise(`powershell -Command "(New-Object -ComObject WScript.Shell).SendKeys([char]173)"`);
-          return "Volume toggled!";
-        } catch (e) { return "I couldn't unmute the volume."; }
-      }
-
-      // Set volume to X% (More flexible regex)
-      const setVolMatch = lowerCmd.match(/(?:set|change|make|to)\s+(?:the\s+)?(?:volume|sound)\s+(?:to|at|is|)\s*(\d+)/i)
-        || lowerCmd.match(/(?:volume|sound)\s+(?:to|at|is|)\s*(\d+)/i);
-
-      if (setVolMatch) {
-        const level = Math.min(100, Math.max(0, parseInt(setVolMatch[1])));
-        try {
-          // Optimization: Setting volume is slow via SendKeys, so we do it in one optimized PS block
-          // We go down 50 times (each step is 2%) to hit 0, then up to the target
-          const ps = `powershell -Command "$w = New-Object -ComObject WScript.Shell; for($i=0;$i -lt 50;$i++){$w.SendKeys([char]174)}; for($i=0;$i -lt ${Math.round(level / 2)};$i++){$w.SendKeys([char]175)}"`;
-          await this.execPromise(ps, 15000);
-          return `Volume set to **${level}%**!`;
-        } catch (e) {
-          return `I tried to set volume to ${level}%, but could not finish.`;
-        }
-      }
-
-      // Increase volume (Dynamic or Default 10%)
-      const incVolMatch = lowerCmd.match(/(?:increase|raise|up)\s+(?:the\s+)?(?:volume|sound)(?:\s+by\s+)?(\d+)?/i)
-        || lowerCmd.match(/(?:volume|sound)\s+(?:up|increase)(?:\s+by\s+)?(\d+)?/i);
-      if (incVolMatch || lowerCmd.includes('volume up') || lowerCmd.includes('louder')) {
-        const amount = incVolMatch && incVolMatch[1] ? Math.min(50, parseInt(incVolMatch[1])) : 10;
-        const steps = Math.round(amount / 2);
-        try {
-          await this.execPromise(`powershell -Command "$w = New-Object -ComObject WScript.Shell; for($i=0;$i -lt ${steps};$i++){$w.SendKeys([char]175)}"`);
-          return `Volume increased by **${amount}%**!`;
-        } catch (e) { return "I couldn't increase the volume."; }
-      }
-
-      // Decrease volume (Dynamic or Default 10%)
-      const decVolMatch = lowerCmd.match(/(?:decrease|lower|reduce|down)\s+(?:the\s+)?(?:volume|sound)(?:\s+by\s+)?(\d+)?/i)
-        || lowerCmd.match(/(?:volume|sound)\s+(?:down|decrease)(?:\s+by\s+)?(\d+)?/i);
-      if (decVolMatch || lowerCmd.includes('volume down') || lowerCmd.includes('quiet') || lowerCmd.includes('lower')) {
-        const amount = decVolMatch && decVolMatch[1] ? Math.min(50, parseInt(decVolMatch[1])) : 10;
-        const steps = Math.round(amount / 2);
-        try {
-          await this.execPromise(`powershell -Command "$w = New-Object -ComObject WScript.Shell; for($i=0;$i -lt ${steps};$i++){$w.SendKeys([char]174)}"`);
-          return `Volume decreased by **${amount}%**!`;
-        } catch (e) { return "I couldn't decrease the volume."; }
-      }
-    }
-
-    // 🔆 Brightness Control
-    if (lowerCmd.includes('brightness')) {
-      // Set brightness to X%
-      const setBrightMatch = lowerCmd.match(/(?:set|change)\s+(?:the\s+)?brightness\s+(?:to|at)\s+(\d+)\s*%?/i);
-      if (setBrightMatch) {
-        const level = Math.min(100, Math.max(0, parseInt(setBrightMatch[1])));
-        try {
-          await this.execPromise(`powershell -Command "(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, ${level})"`);
-          return `Brightness set to **${level}%**!`;
-        } catch (e) {
-          return `I couldn't set the brightness. This might not be supported on desktop monitors.`;
-        }
-      }
-
-      // Increase brightness by X%
-      const incBrightMatch = lowerCmd.match(/(?:increase|raise|up)\s+(?:the\s+)?brightness\s+(?:by\s+|to\s+)?(\d+)\s*%?/i);
-      if (incBrightMatch) {
-        const amount = Math.min(100, parseInt(incBrightMatch[1]));
-        try {
-          const ps = `powershell -Command "$current = (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness).CurrentBrightness; $new = [math]::Min(100, $current + ${amount}); (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, $new); Write-Output $new"`;
-          const result = await this.execPromise(ps);
-          return `Brightness increased by ${amount}% — now at **${result}%**!`;
-        } catch (e) {
-          return `I couldn't adjust the brightness.`;
-        }
-      }
-
-      // Decrease brightness by X%
-      const decBrightMatch = lowerCmd.match(/(?:decrease|lower|reduce|down|dim)\s+(?:the\s+)?brightness\s+(?:by\s+|to\s+)?(\d+)\s*%?/i);
-      if (decBrightMatch) {
-        const amount = Math.min(100, parseInt(decBrightMatch[1]));
-        try {
-          const ps = `powershell -Command "$current = (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness).CurrentBrightness; $new = [math]::Max(0, $current - ${amount}); (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, $new); Write-Output $new"`;
-          const result = await this.execPromise(ps);
-          return `Brightness decreased by ${amount}% — now at **${result}%**!`;
-        } catch (e) {
-          return `I couldn't adjust the brightness.`;
-        }
-      }
-    }
-
-    // 🔋 Battery Status
-    if (lowerCmd.includes('battery') && (lowerCmd.includes('percentage') || lowerCmd.includes('status') || lowerCmd.includes('level') || lowerCmd.includes('charge') || lowerCmd.includes('how much'))) {
-      try {
-        const ps = `powershell -Command "$b = Get-WmiObject Win32_Battery; if ($b) { Write-Output ('' + $b.EstimatedChargeRemaining + '|' + $b.BatteryStatus) } else { Write-Output 'NO_BATTERY' }"`;
-        const result = await this.execPromise(ps);
-        if (result === 'NO_BATTERY') {
-          return "This device doesn't have a battery — it's running on direct power.";
-        }
-        const [percent, statusCode] = result.split('|');
-        const charging = statusCode === '2' ? ' and **charging**' : statusCode === '1' ? ' and **on battery**' : '';
-        return `Your battery is at **${percent}%**${charging}.`;
-      } catch (e) {
-        return "I couldn't retrieve the battery status right now.";
-      }
-    }
-
-    // 🖥️ CPU / System Health
-    if (lowerCmd.includes('cpu') && (lowerCmd.includes('health') || lowerCmd.includes('usage') || lowerCmd.includes('status') || lowerCmd.includes('load'))) {
-      try {
-        const ps = `powershell -Command "$cpu = (Get-WmiObject Win32_Processor).LoadPercentage; $mem = Get-WmiObject Win32_OperatingSystem; $totalMem = [math]::Round($mem.TotalVisibleMemorySize / 1MB, 1); $freeMem = [math]::Round($mem.FreePhysicalMemory / 1MB, 1); $usedMem = $totalMem - $freeMem; Write-Output ($cpu.ToString() + '|' + $usedMem.ToString() + '|' + $totalMem.ToString())"`;
-        const result = await this.execPromise(ps, 10000);
-        const [cpuLoad, usedMem, totalMem] = result.split('|');
-        return `**CPU Usage:** ${cpuLoad}%\n**RAM:** ${usedMem} GB used out of ${totalMem} GB\n**Platform:** ${os.platform()} ${os.arch()}`;
-      } catch (e) {
-        return "I couldn't fetch system health info right now.";
-      }
-    }
-
-    // 📝 Open Notepad (with optional text)
-    if (lowerCmd.includes('open notepad') || lowerCmd.includes('launch notepad') || lowerCmd.includes('start notepad')) {
-      try {
-        const writeMatch = command.match(/(?:write|type|put)\s+["']?(.+?)["']?\s+(?:in|into|on)\s+notepad/i)
-          || command.match(/open\s+notepad\s+(?:and\s+)?(?:write|type)\s+["']?(.+?)["']?$/i);
-        if (writeMatch && writeMatch[1]) {
-          // Create a temp file with the content, then open it
-          const content = writeMatch[1].trim();
-          const tempFile = path.join(os.tmpdir(), `aiva_note_${Date.now()}.txt`);
-          const fs = require('fs');
-          fs.writeFileSync(tempFile, content, 'utf-8');
-          await this.execPromise(`start notepad "${tempFile}"`);
-          return `Opened Notepad with your text: "${content}"`;
-        } else {
-          await this.execPromise('start notepad');
-          return "Opening Notepad!";
-        }
-      } catch (e) {
-        return "I couldn't open Notepad.";
-      }
-    }
-
-    // 📁 Open File Explorer
-    if (lowerCmd.includes('open file explorer') || lowerCmd.includes('open explorer') || lowerCmd.includes('open files')) {
-      try {
-        await this.execPromise('start explorer');
-        return "Opening File Explorer!";
-      } catch (e) {
-        return "I couldn't open File Explorer.";
-      }
-    }
-
-    // 🖩 Open Calculator
-    if (lowerCmd.includes('open calculator') || lowerCmd.includes('launch calculator')) {
-      try {
-        await this.execPromise('start calc');
-        return "Opening Calculator!";
-      } catch (e) {
-        return "I couldn't open Calculator.";
-      }
-    }
-
-    // ⚙️ Open Settings
-    if (lowerCmd.includes('open settings') || lowerCmd.includes('launch settings') || lowerCmd.includes('system settings')) {
-      try {
-        await this.execPromise('start ms-settings:');
-        return "Opening Windows Settings!";
-      } catch (e) {
-        return "I couldn't open Settings.";
-      }
-    }
-
-    // 🎨 Open Paint
-    if (lowerCmd.includes('open paint') || lowerCmd.includes('launch paint')) {
-      try {
-        await this.execPromise('start mspaint');
-        return "Opening Paint!";
-      } catch (e) {
-        return "I couldn't open Paint.";
-      }
-    }
-
-    // 📧 Open Mail
-    if (lowerCmd.includes('open mail') || lowerCmd.includes('open email') || lowerCmd.includes('open outlook')) {
-      try {
-        await this.execPromise('start outlookmail:');
-        return "Opening Mail app!";
-      } catch (e) {
-        try {
-          await this.execPromise('start mailto:');
-          return "Opening your default mail client!";
-        } catch (e2) {
-          return "I couldn't open the mail app.";
-        }
-      }
-    }
-
-    // 🎵 Open Spotify
-    if (lowerCmd.includes('open spotify') || lowerCmd.includes('launch spotify')) {
-      try {
-        await this.execPromise('start spotify:');
-        return "Opening Spotify!";
-      } catch (e) {
-        return "I couldn't open Spotify. Make sure it's installed.";
-      }
-    }
-
-    // 💻 Open Task Manager
-    if (lowerCmd.includes('open task manager') || lowerCmd.includes('task manager')) {
-      try {
-        await this.execPromise('start taskmgr');
-        return "Opening Task Manager!";
-      } catch (e) {
-        return "I couldn't open Task Manager.";
-      }
-    }
-
-    // 🔌 Shutdown / Restart / Sleep
-    if (lowerCmd.includes('shutdown') || lowerCmd.includes('shut down')) {
-      return { text: "Are you sure you want to shut down? Say 'confirm shutdown' to proceed.", action: 'CONFIRM_NEEDED', pendingAction: 'shutdown' };
-    }
-    if (lowerCmd.includes('restart') || lowerCmd.includes('reboot')) {
-      return { text: "Are you sure you want to restart? Say 'confirm restart' to proceed.", action: 'CONFIRM_NEEDED', pendingAction: 'restart' };
-    }
-    if (lowerCmd.includes('confirm shutdown')) {
-      try { await this.execPromise('shutdown /s /t 5'); return "Shutting down in 5 seconds..."; } catch (e) { return "I couldn't initiate shutdown."; }
-    }
-    if (lowerCmd.includes('confirm restart')) {
-      try { await this.execPromise('shutdown /r /t 5'); return "Restarting in 5 seconds..."; } catch (e) { return "I couldn't initiate restart."; }
-    }
-    if (lowerCmd.includes('sleep') && (lowerCmd.includes('computer') || lowerCmd.includes('pc') || lowerCmd.includes('system'))) {
-      try {
-        await this.execPromise('rundll32.exe powrprof.dll,SetSuspendState 0,1,0');
-        return "Putting your computer to sleep...";
-      } catch (e) {
-        return "I couldn't put the system to sleep.";
-      }
-    }
-
-    // 🚀 Generic App Launcher — "open <app name>"
-    if (lowerCmd.match(/^(?:open|launch|start)\s+(.+)/i) && !lowerCmd.includes('voice mode') && !lowerCmd.includes('text mode') && !lowerCmd.includes('type mode')) {
-      const appMatch = command.match(/^(?:open|launch|start)\s+(.+)/i);
-      if (appMatch) {
-        const appName = appMatch[1].trim();
-        // Skip if it looks like a question or non-app command
-        if (!appName.match(/^(the |a |an |my |what|how|when|where|why|who|can |will |should )/i)) {
-          try {
-            // Try to launch via start command
-            await this.execPromise(`start "" "${appName}"`);
-            return `Opening **${appName}**!`;
-          } catch (e) {
-            // Try searching in Start Menu
-            try {
-              await this.execPromise(`powershell -Command "Start-Process '${appName.replace(/'/g, "''")}'" `);
-              return `Launching **${appName}**!`;
-            } catch (e2) {
-              logger.warn(`App launch failed for: ${appName}`, e2.message);
-              // Don't return error — fall through to AI for natural response
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+          const payload = {
+            contents: [{ role: "user", parts: [{ text: draftPrompt }] }],
+            generationConfig: { maxOutputTokens: 300 }
+          };
+          const gRes = await fetch(geminiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            if (gData.candidates && gData.candidates[0].content && gData.candidates[0].content.parts[0].text) {
+              aiDraftText = gData.candidates[0].content.parts[0].text.trim();
             }
           }
-        }
+        } catch (e) { }
+      }
+
+      // Fallback Groq
+      if (!aiDraftText && this.openai) {
+        try {
+          const completion = await this.openai.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: [{ role: "user", content: draftPrompt }],
+            max_tokens: 300,
+          });
+          aiDraftText = completion.choices[0].message.content.trim();
+        } catch (e) { }
+      }
+
+      if (aiDraftText) {
+        return {
+          text: "I have drafted the email for you. Opening your secure mail client to review and send!",
+          action: 'REDIRECT',
+          url: `mailto:?subject=Drafted%20Email&body=${encodeURIComponent(aiDraftText)}`
+        };
       }
     }
 
@@ -547,31 +349,30 @@ class CommandService {
       }
     }
 
-    // 2. Identity & Capabilities (with friendlier phrasing)
-    if (lowerCmd.includes('who are you') || lowerCmd.includes('your name') || lowerCmd.includes('what is the name')) {
-      return this.randomResponse([
-        "I'm AIVA, your friendly AI voice assistant.",
-        "They call me AIVA — always happy to help!",
-      ]);
+    // ==========================================
+    // 🏠 LOCAL JSON RESPONSES (No API Quota Used)
+    // ==========================================
+    // Dynamically pull responses.json so updates apply cleanly without requiring manual server reboots
+    try {
+      if (fs.existsSync(localResponsesPath)) {
+        localResponses = JSON.parse(fs.readFileSync(localResponsesPath, 'utf8'));
+      }
+    } catch (e) { }
+
+    // Trim punctuation to perfectly hit JSON keys (e.g. "hi." must trigger key "hi")
+    const cleanCmd = lowerCmd.replace(/[^a-z0-9\s]/gi, '').trim();
+
+    for (const [key, responses] of Object.entries(localResponses.greetings || {})) {
+      if (cleanCmd === key || cleanCmd.startsWith(`${key} `) || cleanCmd.endsWith(` ${key}`)) {
+        return this.randomResponse(responses);
+      }
     }
-    if (lowerCmd.includes('what can you do') || lowerCmd.includes('help') || lowerCmd.includes('how can you assist')) {
-      return this.randomResponse([
-        "I can chat, fetch info, control devices, tell jokes, and keep you company. Just ask away! 😄",
-        "Anything from answering questions to organizing your day — I'm here for you. 💡",
-      ]);
+    for (const [key, responses] of Object.entries(localResponses.smalltalk || {})) {
+      if (cleanCmd.includes(key)) {
+        return this.randomResponse(responses);
+      }
     }
-    if (lowerCmd.includes('how can i assist you')) {
-      return this.randomResponse([
-        "Just keep my code bug-free and our conversations interesting!",
-        "A friendly chat and some good commands go a long way."
-      ]);
-    }
-    if (lowerCmd.includes('who made you') || lowerCmd.includes('creator')) {
-      return this.randomResponse([
-        "I was brought to life by Debasmita and Babin — they're brilliant.",
-        "Debasmita and Babin built me. Give them a wave if you see them online!",
-      ]);
-    }
+
     if (lowerCmd.includes('change your voice') && (lowerCmd.includes('can you') || lowerCmd.includes('will you') || lowerCmd.includes('if i tell you'))) {
       return "Sure! Tell me 'change voice to' plus the name, and I'll switch to a new personality.";
     }
@@ -587,28 +388,6 @@ class CommandService {
       };
     }
 
-    // 3. Greetings & Small Talk
-    if (lowerCmd === 'hello' || lowerCmd === 'hi' || lowerCmd === 'hey' || lowerCmd.includes('good morning') || lowerCmd.includes('good evening')) {
-      return this.randomResponse([
-        "Hello! How can I be of service?",
-        "Hi there! What can I do for you today?",
-        "Hey! Ready when you are.",
-      ]);
-    }
-    if (lowerCmd.includes('how are you')) {
-      return this.randomResponse([
-        "I'm doing great — thanks for asking!",
-        "All systems go, thanks!",
-        "Feeling sharp and ready to help.",
-      ]);
-    }
-    if (lowerCmd.includes('thank you') || lowerCmd.includes('thanks')) {
-      return this.randomResponse([
-        "You're very welcome!",
-        "Anytime! Happy to help.",
-        "No problem at all!",
-      ]);
-    }
 
     // 4. Fun / Easter Eggs
     if (lowerCmd.includes('tell me a joke')) {
@@ -645,9 +424,9 @@ class CommandService {
     }
 
     // ==========================================
-    // 🧠 AI PROCESSING (Groq + Live Web Context)
+    // 🧠 AI PROCESSING (Gemini Primary -> Groq Fallback)
     // ==========================================
-    if (this.openai) {
+    if (this.geminiAvailable || this.openai) {
       try {
         const now = new Date().toLocaleString('en-US', {
           weekday: 'long',
@@ -661,153 +440,91 @@ class CommandService {
 
         // 🌍 REAL-TIME WEB CONTEXT — Fetch search snippets + actual page content
         let webContext = "";
-        try {
-          logger.info(`Fetching web context for: ${command}`);
-          const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-          const ddgHtmlRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(command)}`, {
-            headers: { 'User-Agent': userAgent }
-          });
-          if (ddgHtmlRes.ok) {
-            const html = await ddgHtmlRes.text();
 
-            // Extract snippets and URLs
-            const snippetRegex = /<a class="result__snippet[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi;
-            let match;
-            const snippets = [];
-            const resultUrls = [];
-            while ((match = snippetRegex.exec(html)) !== null && snippets.length < 5) {
-              const urlMatch = match[1];
-              const textMatch = match[2];
-              snippets.push(textMatch.replace(/<[^>]*>?/gm, '').trim());
-
-              let url = urlMatch;
-              if (url.includes('uddg=')) {
-                try { url = decodeURIComponent(url.split('uddg=')[1].split('&')[0]); } catch (e) { }
-              }
-              if (url.startsWith('http') && !url.includes('duckduckgo.com')) {
-                if (resultUrls.length < 2) {
-                  resultUrls.push(url);
-                }
-              }
-            }
-
-            // Fetch actual content from top 2 result pages
-            let deepContent = "";
-            const deepFetches = resultUrls.slice(0, 2).map(async (pageUrl) => {
-              try {
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 6000);
-                const pageRes = await fetch(pageUrl, {
-                  headers: { 'User-Agent': userAgent },
-                  signal: controller.signal,
-                  redirect: 'follow'
-                });
-                clearTimeout(timeout);
-                if (pageRes.ok) {
-                  const pageHtml = await pageRes.text();
-                  // Strip scripts, styles, and HTML tags to get text content
-                  let textContent = pageHtml
-                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-                    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-                    .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-                    .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
-                    .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
-                    .replace(/<[^>]*>/g, ' ')
-                    .replace(/&nbsp;/g, ' ')
-                    .replace(/&amp;/g, '&')
-                    .replace(/&lt;/g, '<')
-                    .replace(/&gt;/g, '>')
-                    .replace(/&#x27;/g, "'")
-                    .replace(/&quot;/g, '"')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-                  // Take up to 1500 chars of relevant content
-                  if (textContent.length > 1500) textContent = textContent.substring(0, 1500) + '...';
-                  return `[Source: ${pageUrl}]\n${textContent}`;
-                }
-              } catch (e) {
-                logger.warn(`Deep fetch failed for ${pageUrl}: ${e.message}`);
-              }
-              return null;
-            });
-
-            const deepResults = (await Promise.all(deepFetches)).filter(Boolean);
-            if (deepResults.length > 0) {
-              deepContent = `\n\n=== DETAILED PAGE CONTENT (Scraped just now from top results) ===\n${deepResults.join('\n\n')}`;
-            }
-
-            if (snippets.length > 0 || deepResults.length > 0) {
-              webContext = `\n\n=== LIVE INTERNET KNOWLEDGE (Retrieved just now) ===\nYou have real-time internet access. Below are LIVE search results and page content scraped seconds ago. Use them to answer the user accurately.
-CRITICAL RULES:
-1. NEVER say "my training data only goes up to" or "I don't have real-time access" — you DO have real-time access via these results.
-2. NEVER refuse to answer about 2024, 2025, 2026, or 2027 events — the data below contains the latest info.
-3. Synthesize ALL the information into a natural, confident answer.
-4. If the data contains specific facts (scores, standings, names, dates), present them directly.
-5. Prefer the DETAILED PAGE CONTENT over snippets.
-6. If asked about a points table or standings, present the data in a clear, organized format.
-7. CRITICAL: DO NOT HALLUCINATE OR GUESS. If the LIVE INTERNET KNOWLEDGE does not explicitly mention player names or scores for 2026, DO NOT invent them.
-8. DATA INTEGRITY: If the context does NOT contain the specific answer, say "I couldn't find the specific details in the latest reports" rather than making up a list. Note: Virat Kohli retired from T20Is in 2024, so do not include him in 2026 stats unless explicitly found.
-Web Snippets:
-- ${snippets.join('\n- ')}${deepContent}`;
-              logger.info(`Web context loaded: ${snippets.length} snippets, ${deepResults.length} deep pages`);
-            }
-          }
-        } catch (e) {
-          logger.warn("Web scrape for LLM context failed:", e.message);
-        }
-
-        // Prepare messages for Grok
-        const messages = [
-          {
-            role: "system",
-            content: `You are AIVA, a calm, intelligent, friendly, and conversational voice assistant inspired by JARVIS. You were created by Debasmita Bose and Babin Bid.
+        const systemPrompt = `You are AIVA, a calm, intelligent, friendly, and conversational voice assistant inspired by JARVIS. You were created by Debasmita Bose and Babin Bid.
 Current Date & Time: ${now}
-You have FULL real-time internet access. You can answer questions about ANY event from ANY year including 2024, 2025, 2026, 2027 and beyond.
-NEVER say your training data is limited. NEVER say you cannot access real-time information. NEVER suggest the user check other websites.
 Always respond naturally, warmly, and with personality. Vary your phrasing so you don't sound robotic or repetitive.
 Be polite, upbeat, and ask follow-up questions when it makes sense.
 Make the user feel like they're talking to a helpful friend.
 Feel free to use markdown formatting like **bold** and *italic* to emphasize important words or names.
 Do not repeat the user's input.
 Be accurate, context-aware, and show a bit of wit or charm when appropriate.
-Keep responses concise (2-4 sentences for simple queries, more for detailed ones).${webContext}`
-          },
-          ...this.chatHistory,
-          { role: "user", content: command }
-        ];
+Keep responses concise (2-4 sentences for simple queries, more for detailed ones).`;
 
-        const completion = await this.openai.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
-          messages: messages,
-          max_tokens: 600,
-        });
+        let aiTextResponse = "";
 
-        const text = completion.choices[0].message.content;
+        // 1. Primary AI: Gemini
+        if (this.geminiAvailable) {
+          try {
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
-        // Update local history
-        this.chatHistory.push({ role: "user", content: command });
-        this.chatHistory.push({ role: "assistant", content: text });
+            const geminiHistory = this.chatHistory.map(m => ({
+              role: m.role === "assistant" ? "model" : "user",
+              parts: [{ text: m.content }]
+            }));
 
-        // Limit history size
-        if (this.chatHistory.length > 20) {
-          this.chatHistory = this.chatHistory.slice(this.chatHistory.length - 20);
+            const payload = {
+              contents: [...geminiHistory, { role: "user", parts: [{ text: command }] }],
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              generationConfig: { maxOutputTokens: 600 }
+            };
+
+            const gRes = await fetch(geminiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            if (gRes.ok) {
+              const gData = await gRes.json();
+              if (gData.candidates && gData.candidates[0].content && gData.candidates[0].content.parts[0].text) {
+                aiTextResponse = gData.candidates[0].content.parts[0].text;
+              }
+            } else if (gRes.status === 429) {
+              logger.warn("Gemini limit exceeded. Switching to Groq fallback.");
+            } else {
+              logger.warn(`Gemini API Error: ${gRes.status}`);
+            }
+          } catch (geminiErr) {
+            logger.warn("Gemini Fetch Error, falling back to Groq:", geminiErr.message);
+          }
         }
 
-        return text;
+        // 2. Secondary AI: Groq Fallback
+        if (!aiTextResponse && this.openai) {
+          logger.info('Using Groq fallback...');
+          const messages = [
+            { role: "system", content: systemPrompt },
+            ...this.chatHistory,
+            { role: "user", content: command }
+          ];
+          const completion = await this.openai.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: messages,
+            max_tokens: 600,
+          });
+          aiTextResponse = completion.choices[0].message.content;
+        }
+
+        if (aiTextResponse) {
+          // Update history
+          this.chatHistory.push({ role: "user", content: command });
+          this.chatHistory.push({ role: "assistant", content: aiTextResponse });
+          if (this.chatHistory.length > 20) {
+            this.chatHistory = this.chatHistory.slice(this.chatHistory.length - 20);
+          }
+          return aiTextResponse;
+        } else {
+          logger.error('Both Gemini and Groq failed to respond.');
+          return "I'm having trouble connecting to my cloud brain right now. Please try again later when traffic subsides.";
+        }
       } catch (error) {
-        logger.error('Grok API Error:', error);
-
-        if (error.status === 401) {
-          return "My AI access key appears to be invalid. Please check my configuration.";
-        }
-        if (error.status === 429) {
-          return "My connection to the cloud is currently limited due to high traffic.";
-        }
-        return "I'm having trouble connecting to my brain right now. Please try again.";
+        logger.error('AI Routing Error:', error);
+        return "I'm having unexpected trouble connecting to my brain right now. Please try again.";
       }
     }
 
-    return "I'm sorry, but my AI brain is currently offline. Please check my configuration.";
+    return "I'm sorry, but my AI brain is currently offline. Please check my configuration keys.";
   }
 
   logTelemetry(data) {

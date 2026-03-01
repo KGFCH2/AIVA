@@ -32,11 +32,12 @@ export default function Home() {
   const startBackgrounds = ['/aiva_bg1.png', '/aiva_bg2.png'];
   const [isProcessing, setIsProcessing] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
-  const [isTextMode, setIsTextMode] = useState(false);
   const [textInput, setTextInput] = useState("");
+  const [isTextMode, setIsTextMode] = useState(false);
 
   const languageNames = {
-    hi: 'Hindi', en: 'English'
+    en: 'English', hi: 'Hindi', bn: 'Bengali', ta: 'Tamil', te: 'Telugu',
+    mr: 'Marathi', gu: 'Gujarati', kn: 'Kannada', ml: 'Malayalam', pa: 'Punjabi', ur: 'Urdu'
   };
 
   const voiceRef = useRef(null);
@@ -44,6 +45,8 @@ export default function Home() {
   const recognitionRef = useRef(null);
   const silenceTimerRef = useRef(null);
   const transcriptRef = useRef("");
+  const lastUserCommand = useRef("");
+  const lastUserTime = useRef(0);
 
   // Scroll chat to bottom
   useEffect(() => {
@@ -137,11 +140,13 @@ export default function Home() {
       const all = window.speechSynthesis.getVoices();
       const filtered = all.filter(v => {
         const l = v.lang.toLowerCase();
-        // Support English
-        if (l.startsWith('en')) return true;
-        // Support Hindi (Filter down to Microsoft Hemant (Male) and Microsoft Kalpana/Swara (Female) if possible)
-        if (l.startsWith('hi')) {
-          // Broadly accept any Hindi voice to maintain OS compatibility
+        // Support English and all major Indian regional languages
+        if (
+          l.startsWith('en') || l.startsWith('hi') || l.startsWith('bn') ||
+          l.startsWith('ta') || l.startsWith('te') || l.startsWith('mr') ||
+          l.startsWith('gu') || l.startsWith('kn') || l.startsWith('ml') ||
+          l.startsWith('pa') || l.startsWith('ur')
+        ) {
           return true;
         }
         return false;
@@ -238,6 +243,7 @@ export default function Home() {
     };
   }, []);
 
+
   const initializeSystem = () => {
     setSystemStarted(true);
     setStatus("System Online");
@@ -295,9 +301,6 @@ export default function Home() {
   };
 
   // Dedup guard
-  const lastUserCommand = useRef('');
-  const lastUserTime = useRef(0);
-
   const processCommand = async (command) => {
     const now = Date.now();
     if (command === lastUserCommand.current && now - lastUserTime.current < 1500) return;
@@ -371,6 +374,11 @@ export default function Home() {
           if (mv && mv.name !== selectedVoice?.name) { setSelectedVoice(mv); voiceRef.current = mv; }
         }
 
+        // Handle Redirects
+        if (data.action === 'REDIRECT' && data.url) {
+          window.open(data.url, '_blank');
+        }
+
         finishResponse(data.response);
       } else {
         finishResponse("Error processing command.");
@@ -440,17 +448,16 @@ export default function Home() {
 
   const features = [
     { icon: Mic, title: "Voice Control", desc: "Natural speech input" },
-    { icon: Monitor, title: "System Control", desc: "Open apps, volume, brightness" },
+    { icon: Globe, title: "Smart Search", desc: "Real-time web browsing" },
     { icon: CloudSun, title: "Live Weather", desc: "City-level accuracy" },
-    { icon: Cpu, title: "AI Powered", desc: "Llama 3.3 70B via Groq" },
+    { icon: Cpu, title: "AI Powered", desc: "Dual Gemini + Groq" },
   ];
 
   const suggestions = [
     { icon: Clock, label: "What time is it?", cmd: "What is the time?" },
     { icon: CloudSun, label: "Weather in Delhi", cmd: "What is the weather in Delhi?" },
-    { icon: Battery, label: "Battery status", cmd: "What is my battery percentage?" },
-    { icon: Volume2, label: "Set volume 50%", cmd: "Set volume to 50%" },
-    { icon: Monitor, label: "Open Camera", cmd: "Open camera" },
+    { icon: Globe, label: "Latest News", cmd: "Give me the latest news headlines" },
+    { icon: Laugh, label: "Tell me a joke", cmd: "Tell me a joke" },
   ];
 
   // Format basic markdown (bold and italic) safely
@@ -548,7 +555,7 @@ export default function Home() {
             {features.map((f, i) => {
               const Icon = f.icon;
               return (
-                <div className="feature-chip" key={i}>
+                <div className="feature-chip" key={i} onClick={f.action} style={f.action ? { cursor: 'pointer' } : {}}>
                   <Icon size={20} className="chip-icon" />
                   <div className="chip-text">
                     <h4>{f.title}</h4>
@@ -603,18 +610,27 @@ export default function Home() {
                       ) : (
                         <p dangerouslySetInnerHTML={formatText(msg.text)} />
                       )}
-                      <div className="timestamp">{msg.time}</div>
+                      <div className="msg-actions">
+                        <button className="copy-msg-btn" onClick={() => navigator.clipboard.writeText(msg.text)} title="Copy message"><Copy size={12} /></button>
+                        <div className="timestamp">{msg.time}</div>
+                      </div>
                     </div>
                     {msg.type === 'user' && <div className={`avatar ${isProcessing && i === chatHistory.length - 1 ? 'avatar-active' : ''}`}><User size={16} /></div>}
                   </div>
                 );
               })}
 
+
+
               {isProcessing && (
                 <div className="chat-msg bot">
                   <div className="avatar"><Bot size={16} /></div>
                   <div className="bubble">
-                    <p style={{ opacity: 0.6, fontStyle: 'italic' }}>Thinking<span className="blink">...</span></p>
+                    <div className="thinking-wave">
+                      <div className="dot"></div>
+                      <div className="dot"></div>
+                      <div className="dot"></div>
+                    </div>
                   </div>
                 </div>
               )}

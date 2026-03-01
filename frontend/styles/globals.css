@@ -27,10 +27,10 @@
   --radius-lg: 24px;
 
   /* Font families */
-  --font-heading: 'Chakra Petch', 'Orbitron', sans-serif;
-  --font-body: 'Space Grotesk', 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
-  --font-display: 'Orbitron', sans-serif;
+  --font-heading: 'Roca 1', 'Roca One', 'Chakra Petch', 'Orbitron', sans-serif;
+  --font-body: 'Roca 2', 'Roca Two', 'Space Grotesk', 'Segoe UI', sans-serif;
+  --font-mono: 'Roca 2', 'Roca Two', 'JetBrains Mono', 'Courier New', monospace;
+  --font-display: 'Roca 1', 'Roca One', 'Orbitron', sans-serif;
 }
 
 body {
@@ -424,6 +424,7 @@ body::before {
   background: var(--glass);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   flex-shrink: 0;
 }
@@ -533,6 +534,7 @@ body::before {
   background: var(--glass);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   transition: all 0.25s;
   cursor: default;
@@ -561,6 +563,7 @@ body::before {
   color: var(--accent3);
 }
 
+
 .chip-text h4 {
   font-family: var(--font-heading);
   font-size: 0.78rem;
@@ -585,6 +588,7 @@ body::before {
   background: var(--glass);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   overflow: hidden;
   min-height: 0;
@@ -784,9 +788,36 @@ body::before {
 .chat-msg .timestamp {
   font-size: 0.62rem;
   color: var(--text-dim);
-  margin-top: 5px;
-  text-align: right;
   font-family: var(--font-mono);
+}
+
+.msg-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.copy-msg-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.chat-msg:hover .copy-msg-btn {
+  opacity: 0.6;
+}
+
+.copy-msg-btn:hover {
+  color: var(--primary);
+  opacity: 1 !important;
 }
 
 /* Empty chat */
@@ -1020,8 +1051,8 @@ body::before {
   border-radius: 24px;
   border: 1px solid rgba(0, 255, 231, 0.15);
   box-shadow: 0 0 50px rgba(0, 0, 0, 0.6), inset 0 0 30px rgba(0, 255, 231, 0.05);
-  backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1149,6 +1180,49 @@ body::before {
   animation: blink-animation 1s steps(2, start) infinite;
 }
 
+/* 🌊 Thinking Dotted Wave */
+.thinking-wave {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 4px 0;
+}
+
+.thinking-wave .dot {
+  width: 6px;
+  height: 6px;
+  background: var(--primary);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--primary-glow);
+  opacity: 0.4;
+  animation: wave-bounce 1.4s infinite ease-in-out both;
+}
+
+.thinking-wave .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.thinking-wave .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes wave-bounce {
+
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+
+  40% {
+    transform: translateY(-8px);
+    opacity: 1;
+    background: var(--secondary);
+  }
+}
+
 @keyframes blink-animation {
   to {
     visibility: hidden;
@@ -1170,20 +1244,20 @@ body::before {
 }
 
 .chat-msg.animating .bubble p {
-  mask-image: linear-gradient(to left, transparent 0%, black 15%);
   -webkit-mask-image: linear-gradient(to left, transparent 0%, black 15%);
+  mask-image: linear-gradient(to left, transparent 0%, black 15%);
   animation: typing-mask 0.15s ease forwards;
 }
 
 @keyframes typing-mask {
   from {
-    mask-image: linear-gradient(to left, transparent 0%, transparent 5%, black 25%);
     -webkit-mask-image: linear-gradient(to left, transparent 0%, transparent 5%, black 25%);
+    mask-image: linear-gradient(to left, transparent 0%, transparent 5%, black 25%);
   }
 
   to {
-    mask-image: none;
     -webkit-mask-image: none;
+    mask-image: none;
   }
 }
 
@@ -1300,6 +1374,13 @@ body::before {
   .suggestion-chip {
     font-size: 0.72rem;
     padding: 6px 12px;
+  }
+}
+
+
+@media (max-width: 768px) {
+  .wake-word-control span {
+    display: none;
   }
 }
 

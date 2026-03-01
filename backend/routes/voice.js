@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const commandService = require("../services/commandService");
+
 const auth = require("../middleware/auth");
 
 // POST /api/voice
@@ -29,5 +30,6 @@ router.post("/", auth, async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 module.exports = router;
