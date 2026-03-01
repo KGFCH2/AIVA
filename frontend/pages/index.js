@@ -32,10 +32,6 @@ export default function Home() {
   const startBackgrounds = ['/aiva_bg1.png', '/aiva_bg2.png'];
   const [isProcessing, setIsProcessing] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
-  const [showMoodCam, setShowMoodCam] = useState(false);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const [moodLoading, setMoodLoading] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [isTextMode, setIsTextMode] = useState(false);
 
@@ -247,48 +243,6 @@ export default function Home() {
     };
   }, []);
 
-  const runMoodScan = async () => {
-    setShowMoodCam(true);
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-      setTimeout(async () => {
-        if (canvasRef.current && videoRef.current) {
-          const ctx = canvasRef.current.getContext('2d');
-          ctx.drawImage(videoRef.current, 0, 0, 300, 200);
-          const image = canvasRef.current.toDataURL('image/jpeg');
-          stream.getTracks().forEach(t => t.stop());
-          setShowMoodCam(false);
-          setMoodLoading(true);
-          try {
-            const res = await fetch("/api/voice/mood", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
-              body: JSON.stringify({ image })
-            });
-            const data = await res.json();
-            if (data.response) {
-              // Handle mood-based personality change
-              if (data.voiceProfile === 'Energetic' || data.mood === 'HAPPY') {
-                const hv = voices.find(v => v.lang.startsWith('hi'));
-                if (hv) { setSelectedVoice(hv); voiceRef.current = hv; }
-              } else if (data.voiceProfile === 'Soothing' || data.mood === 'SAD') {
-                const sv = voices.find(v => v.name.includes('Zira') || v.name.includes('Samantha'));
-                if (sv) { setSelectedVoice(sv); voiceRef.current = sv; }
-              }
-              finishResponse(data.response);
-            }
-          } catch (e) {
-            finishResponse("I couldn't identify your mood today, but you look great! 😄");
-          }
-          setMoodLoading(false);
-        }
-      }, 3000); // 3 seconds to "look" at the camera
-    }
-  };
 
   const initializeSystem = () => {
     setSystemStarted(true);
@@ -497,7 +451,6 @@ export default function Home() {
     { icon: Globe, title: "Smart Search", desc: "Real-time web browsing" },
     { icon: CloudSun, title: "Live Weather", desc: "City-level accuracy" },
     { icon: Cpu, title: "AI Powered", desc: "Dual Gemini + Groq" },
-    { icon: Laugh, title: "Mood Scan", desc: "AI personality based on your face", action: runMoodScan },
   ];
 
   const suggestions = [
@@ -603,7 +556,7 @@ export default function Home() {
               const Icon = f.icon;
               return (
                 <div className="feature-chip" key={i} onClick={f.action} style={f.action ? { cursor: 'pointer' } : {}}>
-                  <Icon size={20} className={`chip-icon ${f.title === 'Mood Scan' && moodLoading ? 'icon-pulse' : ''}`} />
+                  <Icon size={20} className="chip-icon" />
                   <div className="chip-text">
                     <h4>{f.title}</h4>
                     <p>{f.desc}</p>
@@ -667,17 +620,7 @@ export default function Home() {
                 );
               })}
 
-              {/* Hidden Cam for Mood Scan */}
-              {showMoodCam && (
-                <div className="mood-cam-overlay">
-                  <div className="mood-cam-window">
-                    <video ref={videoRef} autoPlay muted playsInline></video>
-                    <div className="mood-cam-scanning"></div>
-                    <p>Establishing Eye Contact...</p>
-                  </div>
-                </div>
-              )}
-              <canvas ref={canvasRef} style={{ display: 'none' }} width="300" height="200"></canvas>
+
 
               {isProcessing && (
                 <div className="chat-msg bot">
