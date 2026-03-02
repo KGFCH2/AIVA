@@ -250,6 +250,31 @@ class CommandService {
     // ⚡ LOCAL FALLBACKS (Fast & Free)
     // ==========================================
 
+    let cleanCmd = lowerCmd.replace(/[^a-z0-9\s]/gi, '').trim();
+    if (cleanCmd === 'hello' || cleanCmd === 'hey' || cleanCmd === 'hii' || cleanCmd === 'yo' || cleanCmd === 'hi') {
+      cleanCmd = 'hi';
+    }
+
+    // ==========================================
+    // 🏠 LOCAL JSON RESPONSES (Instant & No Quota)
+    // ==========================================
+    try {
+      if (fs.existsSync(localResponsesPath)) {
+        localResponses = JSON.parse(fs.readFileSync(localResponsesPath, 'utf8'));
+      }
+    } catch (e) { }
+
+    for (const [key, responses] of Object.entries(localResponses.greetings || {})) {
+      if (cleanCmd === key || cleanCmd.startsWith(`${key} `) || cleanCmd.endsWith(` ${key}`)) {
+        return this.randomResponse(responses);
+      }
+    }
+    for (const [key, responses] of Object.entries(localResponses.smalltalk || {})) {
+      if (cleanCmd.includes(key)) {
+        return this.randomResponse(responses);
+      }
+    }
+
     // 1. Time & Date (with varied replies)
     // Exclude "temperature" or "weather" queries from matching "day" or "date"
     const isWeatherQuery = lowerCmd.includes('temperature') || lowerCmd.includes('weather');
@@ -268,7 +293,7 @@ class CommandService {
       ]);
     }
 
-    // 🌤️ Weather handling (OpenWeatherMap Primary, WeatherAPI Fallback)
+    // 🌤️ Weather handling (WeatherAPI.com Primary, OpenWeatherMap Fallback)
     if (lowerCmd.includes('temperature') || lowerCmd.includes('weather')) {
       try {
         let city = '';
@@ -285,19 +310,7 @@ class CommandService {
         const myOpenWeatherKey = process.env.OPENWEATHER_API_KEY || 'a4fad424377d97a9f6613fb7aeeeec83';
         const myWeatherApiKey = process.env.WEATHER_API_KEY || '14d4a5817fca43efb4c173415261102';
 
-        // 1. Primary: OpenWeatherMap
-        try {
-          const owUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${myOpenWeatherKey}&units=metric`;
-          const owRes = await fetch(owUrl, { timeout: 8000 });
-          if (owRes.ok) {
-            const data = await owRes.json();
-            return `The current weather in ${data.name} is ${Math.round(data.main.temp)}°C with ${data.weather[0].description}.`;
-          }
-        } catch (e) {
-          logger.warn('OpenWeatherMap fallback triggered:', e.message);
-        }
-
-        // 2. Fallback: WeatherAPI.com
+        // 1. Primary: WeatherAPI.com (Higher Accuracy)
         try {
           const wapiUrl = `https://api.weatherapi.com/v1/current.json?key=${myWeatherApiKey}&q=${encodeURIComponent(city)}&aqi=no`;
           const wapiRes = await fetch(wapiUrl, { timeout: 8000 });
@@ -306,7 +319,19 @@ class CommandService {
             return `The weather in ${data.location.name} is currently ${data.current.temp_c}°C, ${data.current.condition.text}.`;
           }
         } catch (e) {
-          logger.warn('WeatherAPI fallback failed:', e.message);
+          logger.warn('WeatherAPI failed, falling back to OpenWeatherMap:', e.message);
+        }
+
+        // 2. Fallback: OpenWeatherMap
+        try {
+          const owUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${myOpenWeatherKey}&units=metric`;
+          const owRes = await fetch(owUrl, { timeout: 8000 });
+          if (owRes.ok) {
+            const data = await owRes.json();
+            return `The current weather in ${data.name} is ${Math.round(data.main.temp)}°C with ${data.weather[0].description}.`;
+          }
+        } catch (e) {
+          logger.warn('OpenWeatherMap fallback failed:', e.message);
         }
 
         return `Sorry, I couldn't fetch the weather for ${city} right now.`;
@@ -360,13 +385,18 @@ class CommandService {
         if (!newsKey) {
           return "I can fetch the news for you, but you need to add a NEWS_API_KEY in the backend environment variables. You can easily get a free one from GNews.io or NewsAPI.org.";
         }
-        const url = `https://gnews.io/api/v4/top-headlines?category=general&lang=en&country=in&max=3&apikey=${newsKey}`;
+        const countMatch = lowerCmd.match(/(\d+)\s+news/);
+        const newsCount = countMatch ? Math.min(parseInt(countMatch[1]), 10) : 3;
+
+        // Force sort by publishedAt to prevent grabbing heavily cached old articles 
+        // e.g., the historical 'Iran war' topic that defaults as relevant in local caches.
+        const url = `https://gnews.io/api/v4/top-headlines?category=general&lang=en&country=in&max=${newsCount}&sortby=publishedAt&apikey=${newsKey}`;
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           if (data.articles && data.articles.length > 0) {
             const headlines = data.articles.map((a, i) => `${i + 1}. ${a.title}`).join('. ');
-            return `Here are the top news headlines: ${headlines}.`;
+            return `Here are the latest ${data.articles.length} news headlines right now: ${headlines}.`;
           }
           return "I couldn't find any recent news stories.";
         }
@@ -375,38 +405,7 @@ class CommandService {
       }
     }
 
-    let cleanCmd = lowerCmd.replace(/[^a-z0-9\s]/gi, '').trim();
-    if (cleanCmd === 'hello' || cleanCmd === 'hey' || cleanCmd === 'hii' || cleanCmd === 'yo' || cleanCmd === 'hi') {
-      const fallbacks = ["Hi! How can I assist you?", "Hello! AIVA is ready.", "Hi! Debasmita and Babin made me fully operational."];
-      return fallbacks[Math.floor(Math.random() * fallbacks.length)];
-    }
-
-    // ==========================================
-    // 🏠 LOCAL JSON RESPONSES (No API Quota Used)
-    // ==========================================
-    // Dynamically pull responses.json so updates apply cleanly without requiring manual server reboots
-    try {
-      if (fs.existsSync(localResponsesPath)) {
-        localResponses = JSON.parse(fs.readFileSync(localResponsesPath, 'utf8'));
-      }
-    } catch (e) { }
-
-    // Trim punctuation to perfectly hit JSON keys (e.g. "hi." must trigger key "hi")
-    // Explicit dictionary remaps for massively common greetings so they reliably hit the fast-cache
-    if (cleanCmd === 'hello' || cleanCmd === 'hey' || cleanCmd === 'hii' || cleanCmd === 'yo') {
-      cleanCmd = 'hi';
-    }
-
-    for (const [key, responses] of Object.entries(localResponses.greetings || {})) {
-      if (cleanCmd === key || cleanCmd.startsWith(`${key} `) || cleanCmd.endsWith(` ${key}`)) {
-        return this.randomResponse(responses);
-      }
-    }
-    for (const [key, responses] of Object.entries(localResponses.smalltalk || {})) {
-      if (cleanCmd.includes(key)) {
-        return this.randomResponse(responses);
-      }
-    }
+    // (Moved LOCAL JSON handling higher up to guarantee 0ms latency for greetings)
 
     if (lowerCmd.includes('change your voice') && (lowerCmd.includes('can you') || lowerCmd.includes('will you') || lowerCmd.includes('if i tell you'))) {
       return "Sure! Tell me 'change voice to' plus the name, and I'll switch to a new personality.";
