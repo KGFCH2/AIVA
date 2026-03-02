@@ -65,8 +65,30 @@ class CommandService {
   }
 
   async processCommand(command) {
-    logger.info(`Processing command: ${command}`);
-    const lowerCmd = command.toLowerCase();
+    // Auto-detect if command needs punctuation and apply it
+    let punctuatedCommand = command.trim();
+    if (!/[.!?]$/.test(punctuatedCommand)) {
+      const questionWords = ['what', 'when', 'where', 'who', 'whom', 'which', 'whose', 'why', 'how', 'is', 'are', 'do', 'does', 'did', 'can', 'could', 'should', 'would', 'will', 'shall', 'may', 'might'];
+      const exclamatoryWords = ['wow', 'amazing', 'great', 'awesome', 'terrible', 'horrible', 'damn', 'fuck', 'shit', 'omg', 'yay', 'hurray', 'gosh', 'insane', 'crazy', 'unbelievable', 'wtf'];
+
+      const firstWord = punctuatedCommand.split(' ')[0].toLowerCase();
+
+      const isQuestion = questionWords.includes(firstWord);
+      const isExclamatory = exclamatoryWords.some(w => punctuatedCommand.toLowerCase().includes(w));
+
+      if (isQuestion && isExclamatory) {
+        punctuatedCommand += '?!';
+      } else if (isQuestion) {
+        punctuatedCommand += '?';
+      } else if (isExclamatory) {
+        punctuatedCommand += '!';
+      } else {
+        punctuatedCommand += '.';
+      }
+    }
+
+    logger.info(`Processing command: ${punctuatedCommand}`);
+    const lowerCmd = punctuatedCommand.toLowerCase();
 
     // quick Indian language offline fallback greetings
     if (lowerCmd.includes('namaste') || lowerCmd.includes('नमस्ते')) {
@@ -92,8 +114,12 @@ class CommandService {
     }
 
     // Creator-specific override
-    if (lowerCmd.includes('debasmita') || lowerCmd.includes('babin') || lowerCmd.includes('who are the creators') || lowerCmd.includes('who made you')) {
+    if (lowerCmd.includes('debasmita') || lowerCmd.includes('babin') || lowerCmd.includes('who are the creators') || lowerCmd.includes('who made you') || lowerCmd.includes('who is your owner') || lowerCmd.includes('who owns you')) {
       return "My creators are Debasmita Bose and Babin Bid. It is a duo project and built to be helpful, friendly, and a bit quirky.";
+    }
+
+    if (lowerCmd.includes('who are you') || lowerCmd.includes('what are you') || lowerCmd.includes('what is your name')) {
+      return "I'm AIVA, an Artificial Intelligence Voice Assistant designed by Debasmita Bose and Babin Bid.";
     }
 
     // ==========================================
@@ -184,7 +210,7 @@ class CommandService {
       // Fast-track through Gemini
       if (this.geminiAvailable) {
         try {
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
           const payload = {
             contents: [{ role: "user", parts: [{ text: draftPrompt }] }],
             generationConfig: { maxOutputTokens: 300 }
@@ -349,6 +375,12 @@ class CommandService {
       }
     }
 
+    let cleanCmd = lowerCmd.replace(/[^a-z0-9\s]/gi, '').trim();
+    if (cleanCmd === 'hello' || cleanCmd === 'hey' || cleanCmd === 'hii' || cleanCmd === 'yo' || cleanCmd === 'hi') {
+      const fallbacks = ["Hi! How can I assist you?", "Hello! AIVA is ready.", "Hi! Debasmita and Babin made me fully operational."];
+      return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    }
+
     // ==========================================
     // 🏠 LOCAL JSON RESPONSES (No API Quota Used)
     // ==========================================
@@ -360,7 +392,10 @@ class CommandService {
     } catch (e) { }
 
     // Trim punctuation to perfectly hit JSON keys (e.g. "hi." must trigger key "hi")
-    const cleanCmd = lowerCmd.replace(/[^a-z0-9\s]/gi, '').trim();
+    // Explicit dictionary remaps for massively common greetings so they reliably hit the fast-cache
+    if (cleanCmd === 'hello' || cleanCmd === 'hey' || cleanCmd === 'hii' || cleanCmd === 'yo') {
+      cleanCmd = 'hi';
+    }
 
     for (const [key, responses] of Object.entries(localResponses.greetings || {})) {
       if (cleanCmd === key || cleanCmd.startsWith(`${key} `) || cleanCmd.endsWith(` ${key}`)) {
@@ -456,7 +491,7 @@ Keep responses concise (2-4 sentences for simple queries, more for detailed ones
         // 1. Primary AI: Gemini
         if (this.geminiAvailable) {
           try {
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
             const geminiHistory = this.chatHistory.map(m => ({
               role: m.role === "assistant" ? "model" : "user",
@@ -469,11 +504,16 @@ Keep responses concise (2-4 sentences for simple queries, more for detailed ones
               generationConfig: { maxOutputTokens: 600 }
             };
 
+            const controller = new AbortController();
+            const fetchTimeout = setTimeout(() => controller.abort(), 12000);
+
             const gRes = await fetch(geminiUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
+              body: JSON.stringify(payload),
+              signal: controller.signal
             });
+            clearTimeout(fetchTimeout);
 
             if (gRes.ok) {
               const gData = await gRes.json();
@@ -481,7 +521,28 @@ Keep responses concise (2-4 sentences for simple queries, more for detailed ones
                 aiTextResponse = gData.candidates[0].content.parts[0].text;
               }
             } else if (gRes.status === 429) {
-              logger.warn("Gemini limit exceeded. Switching to Groq fallback.");
+              logger.warn("Gemini limit exceeded. Retrying once after 10 seconds...");
+              // 10 second retry
+              await new Promise(resolve => setTimeout(resolve, 10000));
+
+              const retryCtrl = new AbortController();
+              const retryTimeout = setTimeout(() => retryCtrl.abort(), 12000);
+              const retryRes = await fetch(geminiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: retryCtrl.signal
+              });
+              clearTimeout(retryTimeout);
+
+              if (retryRes.ok) {
+                const retryData = await retryRes.json();
+                if (retryData.candidates && retryData.candidates[0].content && retryData.candidates[0].content.parts[0].text) {
+                  aiTextResponse = retryData.candidates[0].content.parts[0].text;
+                }
+              } else {
+                logger.warn("Gemini limit persisted. Fast-switching to Groq fallback.");
+              }
             } else {
               logger.warn(`Gemini API Error: ${gRes.status}`);
             }

@@ -1393,3 +1393,32 @@ body::before {
     max-width: 85%;
   }
 }
+
+/* Typing Blur Effect */
+.typing-blur-word {
+  display: inline-block;
+  animation: typeBlurIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  opacity: 0;
+  transform: translateY(2px) scale(0.98);
+  filter: blur(4px);
+  will-change: filter, opacity, transform;
+}
+
+@keyframes typeBlurIn {
+  0% {
+    filter: blur(4px);
+    opacity: 0;
+    transform: translateY(2px) scale(0.98);
+  }
+
+  60% {
+    opacity: 1;
+    transform: translateY(0) scale(1.0);
+  }
+
+  100% {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
