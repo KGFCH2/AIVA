@@ -16,7 +16,7 @@ AIVA is a full-stack, JARVIS-inspired web-based voice assistant. It delivers an 
 - 🏏 **Live Sports Scores** *(CricketData + API-Football)* — real-time, ball-by-ball
 - 📰 Live News & Headlines *(GNews API)*
 - 🌐 **Real-Time Web Search** *(DuckDuckGo HTML scraping)* — enables answering about any current event
-- 🤖 Conversational AI via **Llama 3.3 70B** (Groq) with internet-augmented responses
+- 🤖 Conversational AI via **Dual Engine**: **Gemini 2.5 Flash** (Primary for speed) with **Llama 3.3 70B** fallback (Groq)
 - ⌨️ **Text/Type Mode** — switch between voice and keyboard input
 
 ---
@@ -29,7 +29,8 @@ AIVA uses multiple APIs working together. Each serves a specific role:
 
 | Key | Service | Purpose |
 |-----|---------|---------|
-| `GROQ_API_KEY` | [Groq Cloud](https://console.groq.com) | Powers AIVA's conversational AI brain (Llama 3.3 70B). **Required** — without this, the assistant cannot think or respond. |
+| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/) | **Primary AI Engine** -> Powers AIVA's conversational brain. Extremely fast (1500 free requests/day). |
+| `GROQ_API_KEY` | [Groq Cloud](https://console.groq.com) | **Fallback AI Engine** -> Powers AIVA's secondary brain (Llama 3.3 70B) in case Gemini's free tier is exceeded. |
 
 ### 🌦️ Weather APIs (Primary + Fallback)
 
@@ -65,6 +66,19 @@ AIVA uses multiple APIs working together. Each serves a specific role:
 ---
 
 ## 📂 File Architecture & Working Principles
+
+### 📁 Root Directory (Documentation & Config)
+
+The root folder contains the critical instructions and overarching project architecture mappings.
+
+| File | 📋 Purpose |
+|------|-----------|
+| 📜 `README.md` | Primary landing page — Quick-start guide, tech stack overview, and feature list. |
+| 📘 `INSTRUCTIONS.md` | **The Developer Guide** — Maps the architecture, deployment, and API flow mapping. |
+| 🧠 `CORE_LOGIC.md` | **The Brain Map** — Explains the 6-tier exact priority logic and fallback waterfall mechanism AIVA uses for routing questions. |
+| 🆓 `FREE_APIS.md` | *(Hidden via gitignore)* — Complete documentation of the free-tier services running AIVA in production. |
+| ⚖️ `LICENSE` | MIT License. |
+| 🛑 `.gitignore` | Blocks API secrets and hidden logic files from GitHub publishing. |
 
 ### 🔙 Backend (Node.js + Express)
 
@@ -132,7 +146,8 @@ Then edit `backend/.env` with your keys:
 # Server
 PORT=5000
 
-# AI Brain (REQUIRED)
+# AI Brain (REQUIRED: At least one)
+GEMINI_API_KEY=your_gemini_key_here
 GROQ_API_KEY=your_groq_api_key_here
 
 # Weather (REQUIRED for weather commands)
@@ -232,7 +247,7 @@ User speaks or types a command
 |---------|---------
 | 🌐 Frontend URL | `http://localhost:3000` |
 | 🔙 Backend URL | `http://localhost:5000` |
-| 🤖 AI Model | `llama-3.3-70b-versatile` (Groq) |
+| 🤖 AI Model | `Gemini 2.5 Flash` (Primary) / `Llama 3.3 70B` (Fallback) |
 | 🧪 Health Check | `GET http://localhost:5000/health` |
 | 👥 Creators | Debasmita Bose & Babin Bid |
 
