@@ -24,7 +24,7 @@
 - 💬 **Chat-centric UI** — mic embedded in input bar, suggestion chips, timestamps, copy/clear
 - 🔒 **Secure API** via `x-api-key` header (bypassed in dev mode)
 - 🎨 **Futuristic theme** — glassmorphism, neon glows, hacker-style boot loader
-- 🧠 **AI Powered** — Llama 3.3 70B through Groq API
+- 🧠 **Dual AI Engine** — Gemini 2.5 Flash (Primary) + Llama 3.3 70B (Fallback)
 - 🎭 **Lucide Icons** — professional icon set throughout the UI
 
 ---
@@ -38,6 +38,7 @@
 3. ⚙️ Configure `.env`:
    ```env
    PORT=5000
+   GEMINI_API_KEY=your_gemini_key
    GROQ_API_KEY=your_groq_api_key_here
    OPENWEATHER_API_KEY=your_openweather_key
    WEATHER_API_KEY=your_weatherapi_key
@@ -77,8 +78,8 @@
 |-------|-----------|
 | 🖥️ Frontend | Next.js 14, React 18, Lucide Icons |
 | 🔙 Backend | Express.js, OpenAI SDK (Groq) |
-| 🧠 AI Model | Llama 3.3 70B Versatile |
-| 🌐 APIs | Groq, wttr.in, Open-Meteo, DuckDuckGo, Wikipedia |
+| 🧠 AI Model | Gemini 2.5 Flash & Llama 3.3 70B |
+| 🌐 APIs | Gemini, Groq, wttr.in, Open-Meteo, DuckDuckGo, Wikipedia |
 | 🗣️ Speech | Web Speech API (Recognition + Synthesis) |
 | 🔤 Fonts | Chakra Petch, Space Grotesk, Orbitron, JetBrains Mono |
 
