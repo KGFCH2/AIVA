@@ -47,15 +47,15 @@ export default function JarvisLoader({ onFinish }) {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const chars = "アイウエオカキクケコサシスセソタチツテトAIVA01{}[]<>/\\|=+-*&^%$#@!";
-    const fontSize = 14;
+    const chars = "010101018942735601010101AIVA";
+    const fontSize = 16;
     const columns = Math.floor(canvas.width / fontSize);
     const drops = Array(columns).fill(1);
 
     const drawMatrix = () => {
-      ctx.fillStyle = "rgba(5, 8, 22, 0.06)";
+      ctx.fillStyle = "rgba(3, 7, 18, 0.15)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#ec489920";
+      ctx.fillStyle = "#ec489945"; // Brighter pink with low opacity for rain glow
       ctx.font = `${fontSize}px monospace`;
 
       for (let i = 0; i < drops.length; i++) {
