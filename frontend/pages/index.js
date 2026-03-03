@@ -155,7 +155,10 @@ export default function Home() {
       setMissingLangs(missing);
 
       const pref = sorted.find(v =>
-        v.name.includes("Google US English") || v.name.includes("Microsoft Zira") || v.name.includes("Samantha")
+        v.lang.startsWith('bn') || // Priority to Bengali
+        v.name.includes("Google US English") ||
+        v.name.includes("Microsoft Zira") ||
+        v.name.includes("Samantha")
       ) || sorted[0];
       if (pref) setSelectedVoice(pref);
     };
@@ -238,8 +241,16 @@ export default function Home() {
     setStatus("System Online");
     const all = window.speechSynthesis.getVoices();
     if (all.length > 0 && !selectedVoice) setSelectedVoice(all[0]);
-    speakResponse("Hi! I am AIVA, made by Debasmita and Babin. How can I assist you?");
-    addMessage('bot', "Hi! I'm AIVA — your AI voice assistant. Tap the mic or try a suggestion below to get started.");
+
+    const isBengali = selectedVoice?.lang.startsWith('bn');
+    const greetingText = isBengali
+      ? "নমস্কার! আমি আইভা। আমি আপনাকে কীভাবে সাহায্য করতে পারি?"
+      : "Hi! I am AIVA, made by Debasmita and Babin. How can I assist you?";
+
+    speakResponse(greetingText);
+    addMessage('bot', isBengali
+      ? "নমস্কার! আমি আইভা — আপনার এআই ভয়েস অ্যাসিস্ট্যান্ট। শুরু করতে মাইকে ট্যাপ করুন বা নিচের পরামর্শগুলো দেখুন।"
+      : "Ready to assist you. Tap the mic below or pick a suggestion to start.");
   };
 
   // Audio
@@ -334,18 +345,21 @@ export default function Home() {
       return;
     }
 
-    // Client-side time
-    if (lower.match(/what.*time/) || lower.includes('current time') || lower.match(/time now/)) {
-      const t = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: 'numeric', hour12: true });
-      const msg = `It is ${t}.`;
-      finishResponse(msg);
-      return;
-    }
-    // Client-side date
-    if (lower.match(/what.*date/) || lower.match(/what.*day/) || lower.includes('current date')) {
-      const d = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-      finishResponse(`Today is ${d}.`);
-      return;
+    // Client-side time/date (Guarded to not steal news/weather queries)
+    const isSpecial = lower.includes('news') || lower.includes('headlines') || lower.includes('weather') || lower.includes('cricket') || lower.includes('score') || lower.includes('match') || lower.includes('sport');
+
+    if (!isSpecial) {
+      if (lower.match(/what.*time/) || lower.includes('current time') || lower.match(/time now/)) {
+        const t = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: 'numeric', hour12: true });
+        const msg = `It is ${t}.`;
+        finishResponse(msg);
+        return;
+      }
+      if (lower.match(/what.*date/) || lower.match(/what.*day/) || lower.includes('current date')) {
+        const d = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        finishResponse(`Today is ${d}.`);
+        return;
+      }
     }
 
     // Send to backend with strict 45s timeout to allow Groq fallback breathing room
@@ -428,29 +442,31 @@ export default function Home() {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
 
-    // Clean up Markdown symbols so the TTS doesn't say "asterisk" or "hash"
-    // Also remove emojis so it doesn't try to spell "smiling face with sunglasses"
     let cleanedText = text.replace(/[*#_`~[\]=+\-]/g, '').trim();
-    cleanedText = cleanedText.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
-    cleanedText = cleanedText.replace(/[\u{1F300}-\u{1F5FF}]/gu, ''); // Misc Symbols and Pictographs
-    cleanedText = cleanedText.replace(/[\u{1F680}-\u{1F6FF}]/gu, ''); // Transport and Map
-    cleanedText = cleanedText.replace(/[\u{1F700}-\u{1F77F}]/gu, ''); // Alchemical Symbols
-    cleanedText = cleanedText.replace(/[\u{1F780}-\u{1F7FF}]/gu, ''); // Geometric Shapes Extended
-    cleanedText = cleanedText.replace(/[\u{1F800}-\u{1F8FF}]/gu, ''); // Supplemental Arrows-C
-    cleanedText = cleanedText.replace(/[\u{1F900}-\u{1F9FF}]/gu, ''); // Supplemental Symbols and Pictographs
-    cleanedText = cleanedText.replace(/[\u{1FA00}-\u{1FA6F}]/gu, ''); // Chess Symbols
-    cleanedText = cleanedText.replace(/[\u{1FA70}-\u{1FAFF}]/gu, ''); // Symbols and Pictographs Extended-A
-    cleanedText = cleanedText.replace(/[\u{2600}-\u{26FF}]/gu, ''); // Misc symbols
-    cleanedText = cleanedText.replace(/[\u{2700}-\u{27BF}]/gu, ''); // Dingbats
+    cleanedText = cleanedText.replace(/[\u{1F600}-\u{27BF}]/gu, '');
 
     const u = new SpeechSynthesisUtterance(cleanedText);
-    const v = voiceRef.current;
-    if (v) u.voice = v;
-    else {
-      const all = window.speechSynthesis.getVoices();
-      if (all.length > 0) u.voice = all[0];
+    const isBengali = /[\u0980-\u09FF]/.test(cleanedText);
+    const isHindi = /[\u0900-\u097F]/.test(cleanedText);
+
+    let allVoices = window.speechSynthesis.getVoices();
+    let targetVoice = voiceRef.current;
+
+    if (isBengali || isHindi) {
+      const langCode = isBengali ? 'bn' : 'hi';
+      const nativeVoice = allVoices.find(v => v.lang.toLowerCase().startsWith(langCode));
+
+      if (nativeVoice) {
+        targetVoice = nativeVoice;
+      } else {
+        // Warning: No native voice found. Browser will likely use English phonetics which sounds bad.
+        setStatus(`Warning: No native ${isBengali ? 'Bengali' : 'Hindi'} voice installed on this system.`);
+      }
     }
-    u.rate = 1.0; u.pitch = 1.0;
+
+    if (targetVoice) u.voice = targetVoice;
+    u.rate = 1.0;
+    u.pitch = 1.0;
     window.speechSynthesis.speak(u);
   };
 
@@ -487,9 +503,9 @@ export default function Home() {
   ];
 
   const suggestions = [
-    { icon: Clock, label: "What time is it?", cmd: "What is the time?" },
+    { icon: Clock, label: "What is the time?", cmd: "What is the time?" },
     { icon: Laugh, label: "Tell me a joke", cmd: "Tell me a joke" },
-    { icon: Globe, label: "Tell me a fun fact", cmd: "Tell me a fun fact" },
+    { icon: Globe, label: "What is the news today?", cmd: "What is the news today?" },
     { icon: Mic, label: "Who are you?", cmd: "Who are you?" },
   ];
 
