@@ -442,43 +442,31 @@ export default function Home() {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
 
-    // Clean up Markdown symbols so the TTS doesn't say "asterisk" or "hash"
-    // Also remove emojis so it doesn't try to spell "smiling face with sunglasses"
     let cleanedText = text.replace(/[*#_`~[\]=+\-]/g, '').trim();
-    cleanedText = cleanedText.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
-    cleanedText = cleanedText.replace(/[\u{1F300}-\u{1F5FF}]/gu, ''); // Misc Symbols and Pictographs
-    cleanedText = cleanedText.replace(/[\u{1F680}-\u{1F6FF}]/gu, ''); // Transport and Map
-    cleanedText = cleanedText.replace(/[\u{1F700}-\u{1F77F}]/gu, ''); // Alchemical Symbols
-    cleanedText = cleanedText.replace(/[\u{1F780}-\u{1F7FF}]/gu, ''); // Geometric Shapes Extended
-    cleanedText = cleanedText.replace(/[\u{1F800}-\u{1F8FF}]/gu, ''); // Supplemental Arrows-C
-    cleanedText = cleanedText.replace(/[\u{1F900}-\u{1F9FF}]/gu, ''); // Supplemental Symbols and Pictographs
-    cleanedText = cleanedText.replace(/[\u{1FA00}-\u{1FA6F}]/gu, ''); // Chess Symbols
-    cleanedText = cleanedText.replace(/[\u{1FA70}-\u{1FAFF}]/gu, ''); // Symbols and Pictographs Extended-A
-    cleanedText = cleanedText.replace(/[\u{2600}-\u{26FF}]/gu, ''); // Misc symbols
-    cleanedText = cleanedText.replace(/[\u{2700}-\u{27BF}]/gu, ''); // Dingbats
+    cleanedText = cleanedText.replace(/[\u{1F600}-\u{27BF}]/gu, '');
 
     const u = new SpeechSynthesisUtterance(cleanedText);
-
-    // Auto-detect language for better voice selection
     const isBengali = /[\u0980-\u09FF]/.test(cleanedText);
     const isHindi = /[\u0900-\u097F]/.test(cleanedText);
 
+    let allVoices = window.speechSynthesis.getVoices();
     let targetVoice = voiceRef.current;
 
-    // If the text is Bengali/Hindi but the selected voice is English, find a matching voice
-    if ((isBengali || isHindi) && (!targetVoice || !targetVoice.lang.startsWith('bn') && !targetVoice.lang.startsWith('hi'))) {
-      const all = window.speechSynthesis.getVoices();
+    if (isBengali || isHindi) {
       const langCode = isBengali ? 'bn' : 'hi';
-      targetVoice = all.find(v => v.lang.startsWith(langCode)) || targetVoice;
+      const nativeVoice = allVoices.find(v => v.lang.toLowerCase().startsWith(langCode));
+
+      if (nativeVoice) {
+        targetVoice = nativeVoice;
+      } else {
+        // Warning: No native voice found. Browser will likely use English phonetics which sounds bad.
+        setStatus(`Warning: No native ${isBengali ? 'Bengali' : 'Hindi'} voice installed on this system.`);
+      }
     }
 
     if (targetVoice) u.voice = targetVoice;
-    else {
-      const all = window.speechSynthesis.getVoices();
-      if (all.length > 0) u.voice = all[0];
-    }
-
-    u.rate = 1.0; u.pitch = 1.0;
+    u.rate = 1.0;
+    u.pitch = 1.0;
     window.speechSynthesis.speak(u);
   };
 
