@@ -463,14 +463,18 @@ export default function Home() {
       if (found) {
         setSelectedVoice(found);
         voiceRef.current = found;
-        speakResponse(`Voice changed to ${languageNames[prefix] || prefix}`);
+        // feedback via status bar rather than speech to avoid
+        // mispronunciations (some voices say "tarankan" repeatedly)
+        setStatus(`Voice changed to ${languageNames[prefix] || prefix}`);
+        playSound('start');
       }
     } else {
       const voice = voices.find(v => v.name === val);
       if (voice) {
         setSelectedVoice(voice);
         voiceRef.current = voice;
-        speakResponse(`Voice changed to ${voice.name}`);
+        setStatus(`Voice changed to ${voice.name}`);
+        playSound('start');
       }
     }
   };
