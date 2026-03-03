@@ -102,7 +102,7 @@ export default function JarvisLoader({ onFinish }) {
         setLines(updatedLines);
         setProgress(((lineIndex + charIndex / current.text.length) / bootSequence.length) * 100);
         charIndex++;
-        setTimeout(typeNext, 18 + Math.random() * 12);
+        setTimeout(typeNext, 25 + Math.random() * 15);
       } else {
         currentLines.push({
           text: current.text,
@@ -112,6 +112,11 @@ export default function JarvisLoader({ onFinish }) {
         setLines([...currentLines]);
         lineIndex++;
         charIndex = 0;
+
+        // Auto-scroll terminal
+        const termBody = document.querySelector('.terminal-body');
+        if (termBody) termBody.scrollTop = termBody.scrollHeight;
+
         setTimeout(typeNext, current.delay);
       }
     };
