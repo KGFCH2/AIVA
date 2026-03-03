@@ -86,24 +86,17 @@ export default function Home() {
     }
   };
 
-  // Copilot-style animated text reveal — word by word blur-to-clear
+  // Copilot-style animated text reveal using native GPU Cascading CSS delays
   const animateMessage = (msgId, fullText) => {
     setAnimatingMsgId(msgId);
-    setAnimatedText("");
+    setAnimatedText(fullText);
     animatingRef.current = true;
-    const words = fullText.split(/\s+/);
-    let current = 0;
-    const interval = setInterval(() => {
-      if (!animatingRef.current) { clearInterval(interval); return; }
-      current++;
-      setAnimatedText(words.slice(0, current).join(' '));
-      if (current >= words.length) {
-        clearInterval(interval);
-        setAnimatingMsgId(null);
-        setAnimatedText("");
-        animatingRef.current = false;
-      }
-    }, 40); // 40ms per word for smooth reveal
+    const wordsCount = fullText.split(/\s+/).length;
+    setTimeout(() => {
+      setAnimatingMsgId(null);
+      setAnimatedText("");
+      animatingRef.current = false;
+    }, wordsCount * 40 + 1500); // Match CSS staggered completion time
   };
 
   useEffect(() => { voicesRef.current = voices; }, [voices]);
@@ -307,7 +300,29 @@ export default function Home() {
     lastUserCommand.current = command;
     lastUserTime.current = now;
 
-    addMessage('user', command);
+    // Intelligent frontend auto-punctuation for voice/text inputs
+    let punctuatedCommand = command.trim();
+    if (!/[.!?]$/.test(punctuatedCommand)) {
+      const questionWords = ['what', 'when', 'where', 'who', 'whom', 'which', 'whose', 'why', 'how', 'is', 'are', 'do', 'does', 'did', 'can', 'could', 'should', 'would', 'will', 'shall', 'may', 'might'];
+      const exclamatoryWords = ['wow', 'amazing', 'great', 'awesome', 'terrible', 'horrible', 'damn', 'fuck', 'shit', 'omg', 'yay', 'hurray', 'gosh', 'insane', 'crazy', 'unbelievable', 'wtf'];
+
+      const firstWord = punctuatedCommand.split(' ')[0].toLowerCase();
+
+      const isQuestion = questionWords.includes(firstWord);
+      const isExclamatory = exclamatoryWords.some(w => punctuatedCommand.toLowerCase().includes(w));
+
+      if (isQuestion && isExclamatory) {
+        punctuatedCommand += '?!';
+      } else if (isQuestion) {
+        punctuatedCommand += '?';
+      } else if (isExclamatory) {
+        punctuatedCommand += '!';
+      } else {
+        punctuatedCommand += '.';
+      }
+    }
+
+    addMessage('user', punctuatedCommand);
 
     const lower = command.toLowerCase();
 
@@ -337,13 +352,19 @@ export default function Home() {
       return;
     }
 
-    // Send to backend
+    // Send to backend with strict 45s timeout to allow Groq fallback breathing room
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+
       const res = await fetch("/api/voice", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
-        body: JSON.stringify({ command })
+        body: JSON.stringify({ command: punctuatedCommand }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
       let data;
       try { data = await res.json(); } catch { data = null; }
 
@@ -412,7 +433,37 @@ export default function Home() {
     window.speechSynthesis.cancel();
 
     // Clean up Markdown symbols so the TTS doesn't say "asterisk" or "hash"
-    const cleanedText = text.replace(/[*#_`~[\]=+\-]/g, '').trim();
+    // Also remove emojis so it doesn't try to spell "smiling face with sunglasses"
+    let cleanedText = text.replace(/[*#_`~[\]=+\-]/g, '').trim();
+    cleanedText = cleanedText.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
+    cleanedText = cleanedText.replace(/[\u{1F300}-\u{1F5FF}]/gu, ''); // Misc Symbols and Pictographs
+    cleanedText = cleanedText.replace(/[\u{1F680}-\u{1F6FF}]/gu, ''); // Transport and Map
+    cleanedText = cleanedText.replace(/[\u{1F700}-\u{1F77F}]/gu, ''); // Alchemical Symbols
+    cleanedText = cleanedText.replace(/[\u{1F780}-\u{1F7FF}]/gu, ''); // Geometric Shapes Extended
+    cleanedText = cleanedText.replace(/[\u{1F800}-\u{1F8FF}]/gu, ''); // Supplemental Arrows-C
+    cleanedText = cleanedText.replace(/[\u{1F900}-\u{1F9FF}]/gu, ''); // Supplemental Symbols and Pictographs
+    cleanedText = cleanedText.replace(/[\u{1FA00}-\u{1FA6F}]/gu, ''); // Chess Symbols
+    cleanedText = cleanedText.replace(/[\u{1FA70}-\u{1FAFF}]/gu, ''); // Symbols and Pictographs Extended-A
+    cleanedText = cleanedText.replace(/[\u{2600}-\u{26FF}]/gu, ''); // Misc symbols
+    cleanedText = cleanedText.replace(/[\u{2700}-\u{27BF}]/gu, ''); // Dingbats
+
+    // Prevent English TTS voices from attempting to speak natively generated Indian texts
+    const isHindiScript = /[\u0900-\u097F]/.test(cleanedText);
+    const isOtherIndianScript = /[\u0980-\u09FF\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0A80-\u0AFF]/.test(cleanedText);
+    const voiceLang = (voiceRef.current?.lang || '').toLowerCase();
+
+    // If text contains non-Hindi Indian scripts, check if selected voice natively supports it
+    if (isOtherIndianScript) {
+      if (!voiceLang.includes('bn') && !voiceLang.includes('ta') && !voiceLang.includes('te') && !voiceLang.includes('mr') && !voiceLang.includes('gu') && !voiceLang.includes('kn') && !voiceLang.includes('ml') && !voiceLang.includes('pa')) {
+        console.log("Muted unsupported TTS language block (Text contains regional script but NO regional voice selected).");
+        return;
+      }
+    }
+    // If text contains Hindi script, check if voice supports Hindi
+    if (isHindiScript && !voiceLang.includes('hi') && !voiceLang.includes('mr') && !voiceLang.includes('ne')) {
+      console.log("Muted unsupported TTS language block (Text contains Devanagari but NO Hindi/Marathi voice selected).");
+      return;
+    }
 
     const u = new SpeechSynthesisUtterance(cleanedText);
     const v = voiceRef.current;
@@ -459,21 +510,45 @@ export default function Home() {
 
   const suggestions = [
     { icon: Clock, label: "What time is it?", cmd: "What is the time?" },
-    { icon: CloudSun, label: "Weather in Delhi", cmd: "What is the weather in Delhi?" },
-    { icon: Globe, label: "Latest News", cmd: "Give me the latest news headlines" },
     { icon: Laugh, label: "Tell me a joke", cmd: "Tell me a joke" },
+    { icon: Globe, label: "Tell me a fun fact", cmd: "Tell me a fun fact" },
+    { icon: Mic, label: "Who are you?", cmd: "Who are you?" },
   ];
 
-  // Format basic markdown (bold and italic) safely
-  const formatText = (text) => {
+  // Format basic markdown (bold and italic) and inject CSS Wave
+  const formatText = (text, isAnimating = false) => {
     if (!text) return { __html: "" };
     let parsed = text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/\n/g, '<br/>');
+      .replace(/>/g, '&gt;');
+
+    // Inject natively cascading staggered delays onto words for the Copilot eye-catching blur wave
+    if (isAnimating) {
+      let wordIndex = 0;
+      parsed = parsed.split(/(\*\*.*?\*\*|\*.*?\*|\n)/g).map(part => {
+        if (!part) return '';
+        if (part === '\n') return '<br/>';
+        if (part.startsWith('**') && part.endsWith('**')) {
+          let inner = part.slice(2, -2).split(' ').map(w => `<span class="typing-blur-word" style="animation-delay: ${(wordIndex++) * 0.04}s">${w}</span>`).join(' ');
+          return `<strong>${inner}</strong>`;
+        }
+        if (part.startsWith('*') && part.endsWith('*')) {
+          let inner = part.slice(1, -1).split(' ').map(w => `<span class="typing-blur-word" style="animation-delay: ${(wordIndex++) * 0.04}s">${w}</span>`).join(' ');
+          return `<em>${inner}</em>`;
+        }
+        return part.split(' ').map(w => {
+          if (!w.trim()) return w;
+          return `<span class="typing-blur-word" style="animation-delay: ${(wordIndex++) * 0.04}s">${w}</span>`;
+        }).join(' ');
+      }).join('');
+    } else {
+      parsed = parsed
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/\n/g, '<br/>');
+    }
+
     return { __html: parsed };
   };
 
@@ -610,9 +685,9 @@ export default function Home() {
                     {msg.type === 'bot' && <div className={`avatar ${isAnimating || isProcessing ? 'avatar-active' : ''}`}><Bot size={16} /></div>}
                     <div className="bubble">
                       {msg.type === 'bot' ? (
-                        <p className={isAnimating ? 'typewriter-text' : ''} dangerouslySetInnerHTML={formatText(displayText)} />
+                        <p className={isAnimating ? 'typewriter-text' : ''} dangerouslySetInnerHTML={formatText(displayText, isAnimating)} />
                       ) : (
-                        <p dangerouslySetInnerHTML={formatText(msg.text)} />
+                        <p dangerouslySetInnerHTML={formatText(msg.text, false)} />
                       )}
                       <div className="msg-actions">
                         <button className="copy-msg-btn" onClick={() => navigator.clipboard.writeText(msg.text)} title="Copy message"><Copy size={12} /></button>

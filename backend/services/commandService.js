@@ -58,17 +58,18 @@ class CommandService {
     }
 
     if (this.geminiAvailable) {
-      logger.info('Gemini API identified for primary routing.');
+      logger.info('Gemini API identified for primary routing using Gemini 2.5 Flash.');
     } else {
       logger.warn('GEMINI_API_KEY is not set. Will default to Groq if available.');
     }
   }
 
   async processCommand(command) {
-    logger.info(`Processing command: ${command}`);
-    const lowerCmd = command.toLowerCase();
+    // Process exactly what the user said (no artificial punctuation injected)
+    let punctuatedCommand = command.trim();
 
-    // quick Indian language offline fallback greetings
+    logger.info(`Processing command: ${punctuatedCommand}`);
+    const lowerCmd = punctuatedCommand.toLowerCase();
     if (lowerCmd.includes('namaste') || lowerCmd.includes('नमस्ते')) {
       return "नमस्ते! मैं AIVA हूँ, आपकी सहायक. मैं आपकी कैसे मदद कर सकती हूँ?";
     }
@@ -92,8 +93,12 @@ class CommandService {
     }
 
     // Creator-specific override
-    if (lowerCmd.includes('debasmita') || lowerCmd.includes('babin') || lowerCmd.includes('who are the creators') || lowerCmd.includes('who made you')) {
+    if (lowerCmd.includes('debasmita') || lowerCmd.includes('babin') || lowerCmd.includes('who are the creators') || lowerCmd.includes('who made you') || lowerCmd.includes('who is your owner') || lowerCmd.includes('who owns you')) {
       return "My creators are Debasmita Bose and Babin Bid. It is a duo project and built to be helpful, friendly, and a bit quirky.";
+    }
+
+    if (lowerCmd.includes('who are you') || lowerCmd.includes('what are you') || lowerCmd.includes('what is your name')) {
+      return "I'm AIVA, an Artificial Intelligence Voice Assistant designed by Debasmita Bose and Babin Bid.";
     }
 
     // ==========================================
@@ -181,7 +186,7 @@ class CommandService {
 
       let aiDraftText = "";
 
-      // Fast-track through Gemini
+      // Fast-track through Gemini 2.5 Flash
       if (this.geminiAvailable) {
         try {
           const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -199,7 +204,7 @@ class CommandService {
         } catch (e) { }
       }
 
-      // Fallback Groq
+      // Email drafting via Groq (Fallback)
       if (!aiDraftText && this.openai) {
         try {
           const completion = await this.openai.chat.completions.create({
@@ -224,6 +229,31 @@ class CommandService {
     // ⚡ LOCAL FALLBACKS (Fast & Free)
     // ==========================================
 
+    let cleanCmd = lowerCmd.replace(/[^a-z0-9\s]/gi, '').trim();
+    if (cleanCmd === 'hello' || cleanCmd === 'hey' || cleanCmd === 'hii' || cleanCmd === 'yo' || cleanCmd === 'hi') {
+      cleanCmd = 'hi';
+    }
+
+    // ==========================================
+    // 🏠 LOCAL JSON RESPONSES (Instant & No Quota)
+    // ==========================================
+    try {
+      if (fs.existsSync(localResponsesPath)) {
+        localResponses = JSON.parse(fs.readFileSync(localResponsesPath, 'utf8'));
+      }
+    } catch (e) { }
+
+    for (const [key, responses] of Object.entries(localResponses.greetings || {})) {
+      if (cleanCmd === key || cleanCmd.startsWith(`${key} `) || cleanCmd.endsWith(` ${key}`)) {
+        return this.randomResponse(responses);
+      }
+    }
+    for (const [key, responses] of Object.entries(localResponses.smalltalk || {})) {
+      if (cleanCmd.includes(key)) {
+        return this.randomResponse(responses);
+      }
+    }
+
     // 1. Time & Date (with varied replies)
     // Exclude "temperature" or "weather" queries from matching "day" or "date"
     const isWeatherQuery = lowerCmd.includes('temperature') || lowerCmd.includes('weather');
@@ -242,7 +272,7 @@ class CommandService {
       ]);
     }
 
-    // 🌤️ Weather handling (OpenWeatherMap Primary, WeatherAPI Fallback)
+    // 🌤️ Weather handling (WeatherAPI.com Primary, OpenWeatherMap Fallback)
     if (lowerCmd.includes('temperature') || lowerCmd.includes('weather')) {
       try {
         let city = '';
@@ -259,19 +289,7 @@ class CommandService {
         const myOpenWeatherKey = process.env.OPENWEATHER_API_KEY || 'a4fad424377d97a9f6613fb7aeeeec83';
         const myWeatherApiKey = process.env.WEATHER_API_KEY || '14d4a5817fca43efb4c173415261102';
 
-        // 1. Primary: OpenWeatherMap
-        try {
-          const owUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${myOpenWeatherKey}&units=metric`;
-          const owRes = await fetch(owUrl, { timeout: 8000 });
-          if (owRes.ok) {
-            const data = await owRes.json();
-            return `The current weather in ${data.name} is ${Math.round(data.main.temp)}°C with ${data.weather[0].description}.`;
-          }
-        } catch (e) {
-          logger.warn('OpenWeatherMap fallback triggered:', e.message);
-        }
-
-        // 2. Fallback: WeatherAPI.com
+        // 1. Primary: WeatherAPI.com (Higher Accuracy)
         try {
           const wapiUrl = `https://api.weatherapi.com/v1/current.json?key=${myWeatherApiKey}&q=${encodeURIComponent(city)}&aqi=no`;
           const wapiRes = await fetch(wapiUrl, { timeout: 8000 });
@@ -280,7 +298,19 @@ class CommandService {
             return `The weather in ${data.location.name} is currently ${data.current.temp_c}°C, ${data.current.condition.text}.`;
           }
         } catch (e) {
-          logger.warn('WeatherAPI fallback failed:', e.message);
+          logger.warn('WeatherAPI failed, falling back to OpenWeatherMap:', e.message);
+        }
+
+        // 2. Fallback: OpenWeatherMap
+        try {
+          const owUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${myOpenWeatherKey}&units=metric`;
+          const owRes = await fetch(owUrl, { timeout: 8000 });
+          if (owRes.ok) {
+            const data = await owRes.json();
+            return `The current weather in ${data.name} is ${Math.round(data.main.temp)}°C with ${data.weather[0].description}.`;
+          }
+        } catch (e) {
+          logger.warn('OpenWeatherMap fallback failed:', e.message);
         }
 
         return `Sorry, I couldn't fetch the weather for ${city} right now.`;
@@ -334,13 +364,18 @@ class CommandService {
         if (!newsKey) {
           return "I can fetch the news for you, but you need to add a NEWS_API_KEY in the backend environment variables. You can easily get a free one from GNews.io or NewsAPI.org.";
         }
-        const url = `https://gnews.io/api/v4/top-headlines?category=general&lang=en&country=in&max=3&apikey=${newsKey}`;
+        const countMatch = lowerCmd.match(/(\d+)\s+news/);
+        const newsCount = countMatch ? Math.min(parseInt(countMatch[1]), 10) : 3;
+
+        // Force sort by publishedAt to prevent grabbing heavily cached old articles 
+        // e.g., the historical 'Iran war' topic that defaults as relevant in local caches.
+        const url = `https://gnews.io/api/v4/top-headlines?category=general&lang=en&country=in&max=${newsCount}&sortby=publishedAt&apikey=${newsKey}`;
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           if (data.articles && data.articles.length > 0) {
             const headlines = data.articles.map((a, i) => `${i + 1}. ${a.title}`).join('. ');
-            return `Here are the top news headlines: ${headlines}.`;
+            return `Here are the latest ${data.articles.length} news headlines right now: ${headlines}.`;
           }
           return "I couldn't find any recent news stories.";
         }
@@ -349,29 +384,7 @@ class CommandService {
       }
     }
 
-    // ==========================================
-    // 🏠 LOCAL JSON RESPONSES (No API Quota Used)
-    // ==========================================
-    // Dynamically pull responses.json so updates apply cleanly without requiring manual server reboots
-    try {
-      if (fs.existsSync(localResponsesPath)) {
-        localResponses = JSON.parse(fs.readFileSync(localResponsesPath, 'utf8'));
-      }
-    } catch (e) { }
-
-    // Trim punctuation to perfectly hit JSON keys (e.g. "hi." must trigger key "hi")
-    const cleanCmd = lowerCmd.replace(/[^a-z0-9\s]/gi, '').trim();
-
-    for (const [key, responses] of Object.entries(localResponses.greetings || {})) {
-      if (cleanCmd === key || cleanCmd.startsWith(`${key} `) || cleanCmd.endsWith(` ${key}`)) {
-        return this.randomResponse(responses);
-      }
-    }
-    for (const [key, responses] of Object.entries(localResponses.smalltalk || {})) {
-      if (cleanCmd.includes(key)) {
-        return this.randomResponse(responses);
-      }
-    }
+    // (Moved LOCAL JSON handling higher up to guarantee 0ms latency for greetings)
 
     if (lowerCmd.includes('change your voice') && (lowerCmd.includes('can you') || lowerCmd.includes('will you') || lowerCmd.includes('if i tell you'))) {
       return "Sure! Tell me 'change voice to' plus the name, and I'll switch to a new personality.";
@@ -424,7 +437,7 @@ class CommandService {
     }
 
     // ==========================================
-    // 🧠 AI PROCESSING (Gemini Primary -> Groq Fallback)
+    // 🧠 AI PROCESSING (Gemini 2.5 Flash Primary -> Groq Fallback)
     // ==========================================
     if (this.geminiAvailable || this.openai) {
       try {
@@ -438,7 +451,7 @@ class CommandService {
           hour12: true
         });
 
-        // 🌍 REAL-TIME WEB CONTEXT — Fetch search snippets + actual page content
+        // 🌍 REAL-TIME WEB CONTEXT
         let webContext = "";
 
         const systemPrompt = `You are AIVA, a calm, intelligent, friendly, and conversational voice assistant inspired by JARVIS. You were created by Debasmita Bose and Babin Bid.
@@ -453,7 +466,7 @@ Keep responses concise (2-4 sentences for simple queries, more for detailed ones
 
         let aiTextResponse = "";
 
-        // 1. Primary AI: Gemini
+        // 1. Primary AI: Gemini 2.5 Flash
         if (this.geminiAvailable) {
           try {
             const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -469,11 +482,16 @@ Keep responses concise (2-4 sentences for simple queries, more for detailed ones
               generationConfig: { maxOutputTokens: 600 }
             };
 
+            const controller = new AbortController();
+            const fetchTimeout = setTimeout(() => controller.abort(), 12000);
+
             const gRes = await fetch(geminiUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
+              body: JSON.stringify(payload),
+              signal: controller.signal
             });
+            clearTimeout(fetchTimeout);
 
             if (gRes.ok) {
               const gData = await gRes.json();
@@ -481,7 +499,27 @@ Keep responses concise (2-4 sentences for simple queries, more for detailed ones
                 aiTextResponse = gData.candidates[0].content.parts[0].text;
               }
             } else if (gRes.status === 429) {
-              logger.warn("Gemini limit exceeded. Switching to Groq fallback.");
+              logger.warn("Gemini limit exceeded. Retrying once after 10 seconds...");
+              await new Promise(resolve => setTimeout(resolve, 10000));
+
+              const retryCtrl = new AbortController();
+              const retryTimeout = setTimeout(() => retryCtrl.abort(), 12000);
+              const retryRes = await fetch(geminiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: retryCtrl.signal
+              });
+              clearTimeout(retryTimeout);
+
+              if (retryRes.ok) {
+                const retryData = await retryRes.json();
+                if (retryData.candidates && retryData.candidates[0].content && retryData.candidates[0].content.parts[0].text) {
+                  aiTextResponse = retryData.candidates[0].content.parts[0].text;
+                }
+              } else {
+                logger.warn("Gemini limit persisted. Fast-switching to Groq fallback.");
+              }
             } else {
               logger.warn(`Gemini API Error: ${gRes.status}`);
             }
@@ -515,12 +553,12 @@ Keep responses concise (2-4 sentences for simple queries, more for detailed ones
           }
           return aiTextResponse;
         } else {
-          logger.error('Both Gemini and Groq failed to respond.');
+          logger.error('Groq failed to respond.');
           return "I'm having trouble connecting to my cloud brain right now. Please try again later when traffic subsides.";
         }
-      } catch (error) {
-        logger.error('AI Routing Error:', error);
-        return "I'm having unexpected trouble connecting to my brain right now. Please try again.";
+      } catch (err) {
+        logger.error('AI Error:', err);
+        return "I encountered an error while thinking about that. Let's try something else!";
       }
     }
 

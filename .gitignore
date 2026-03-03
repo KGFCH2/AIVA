@@ -14,10 +14,15 @@ node_modules/
 .env.test.local
 .env.production.local
 backend/.env
+frontend/.env
 
 # === Next.js Build ===
 frontend/.next/
 frontend/out/
+
+# === Vercel Deployment ===
+.vercel
+.vercel/output/
 
 # === Logs ===
 logs/
@@ -49,3 +54,6 @@ build/
 # === Misc ===
 *.tsbuildinfo
 next-env.d.ts
+
+# === Hidden Documentation ===
+FREE_APIS.md

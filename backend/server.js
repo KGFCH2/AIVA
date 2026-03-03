@@ -19,6 +19,16 @@ app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
 // ================= ROUTES =================
 app.use("/api/voice", voiceRoutes);
+app.get("/api/debug", (req, res) => {
+  const cmdSvc = require('./services/commandService');
+  const fs = require('fs');
+  try {
+    const local = JSON.parse(fs.readFileSync('./data/responses.json', 'utf8'));
+    res.json({ keys: Object.keys(local.greetings).length });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
 
 // ================= HEALTH CHECK =================
 app.get("/health", (req, res) => {
@@ -28,4 +38,5 @@ app.get("/health", (req, res) => {
 // ================= START SERVER =================
 app.listen(PORT, () => {
   console.log(`🚀 AIVA Backend running on port ${PORT}`);
+  require('fs').writeFileSync('server_up.txt', `Running on ${PORT}`);
 });
